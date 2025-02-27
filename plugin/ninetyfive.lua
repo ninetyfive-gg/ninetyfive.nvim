@@ -12,4 +12,8 @@ else
     vim.api.nvim_create_user_command("Ninetyfive", function()
         require("ninetyfive").toggle()
     end, {})
+
+    vim.api.nvim_create_user_command("NinetyfiveKey", function()
+        require("ninetyfive").setApiKey("myFakeApiKey")
+    end, {})
 end

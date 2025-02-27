@@ -1,5 +1,6 @@
 local main = require("ninetyfive.main")
 local config = require("ninetyfive.config")
+local log = require("ninetyfive.util.log")
 
 local Ninetyfive = {}
 
@@ -29,6 +30,13 @@ end
 -- setup Ninetyfive options and merge them with user provided ones.
 function Ninetyfive.setup(opts)
     _G.Ninetyfive.config = config.setup(opts)
+end
+
+--- sets Ninetyfive with the provided API Key
+---
+---@param apiKey: the api key you want to use.
+function Ninetyfive.setApiKey(apiKey)
+    log.debug("some.scope", "Set api key called!!!!")
 end
 
 _G.Ninetyfive = Ninetyfive

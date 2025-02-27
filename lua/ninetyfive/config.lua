@@ -9,7 +9,7 @@ local Ninetyfive = {}
 ---@eval return MiniDoc.afterlines_to_code(MiniDoc.current.eval_section)
 Ninetyfive.options = {
     -- Prints useful logs about what event are triggered, and reasons actions are executed.
-    debug = false,
+    debug = true,
 }
 
 ---@private
