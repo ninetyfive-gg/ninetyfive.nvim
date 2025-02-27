@@ -1,0 +1,46 @@
+==============================================================================
+------------------------------------------------------------------------------
+                                                           *Ninetyfive.toggle()*
+                             `Ninetyfive.toggle`()
+Toggle the plugin by calling the `enable`/`disable` methods respectively.
+
+------------------------------------------------------------------------------
+                                                           *Ninetyfive.enable()*
+                          `Ninetyfive.enable`({scope})
+Initializes the plugin, sets event listeners and internal state.
+
+------------------------------------------------------------------------------
+                                                          *Ninetyfive.disable()*
+                             `Ninetyfive.disable`()
+Disables the plugin, clear highlight groups and autocmds, closes side buffers and resets the internal state.
+
+
+==============================================================================
+------------------------------------------------------------------------------
+                                                            *Ninetyfive.options*
+                              `Ninetyfive.options`
+Ninetyfive configuration with its default values.
+
+Type ~
+`(table)`
+Default values:
+>lua
+  Ninetyfive.options = {
+      -- Prints useful logs about what event are triggered, and reasons actions are executed.
+      debug = false,
+  }
+
+<
+------------------------------------------------------------------------------
+                                                            *Ninetyfive.setup()*
+                         `Ninetyfive.setup`({options})
+Define your ninetyfive setup.
+
+Parameters ~
+{options} `(table)` Module config table. See |Ninetyfive.options|.
+
+Usage ~
+`require("ninetyfive").setup()` (add `{}` with your |Ninetyfive.options| table)
+
+
+ vim:tw=78:ts=8:noet:ft=help:norl:
