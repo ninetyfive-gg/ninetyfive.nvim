@@ -11,6 +11,7 @@ local function set_ghost_text(bufnr, line, col)
     vim.api.nvim_buf_clear_namespace(bufnr, ninetyfive_ns, 0, -1)
   
     -- Set the ghost text using an extmark
+    -- https://neovim.io/doc/user/api.html#nvim_buf_set_extmark()
     vim.api.nvim_buf_set_extmark(bufnr, ninetyfive_ns, line, col, {
       virt_text = {{"hello world", "Comment"}}, -- "Comment" is the highlight group
       virt_text_pos = "eol", -- Display the text at the end of the line
