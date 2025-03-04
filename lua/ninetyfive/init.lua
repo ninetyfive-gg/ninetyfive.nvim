@@ -205,7 +205,10 @@ local function set_ghost_text(bufnr, line, col)
     end
 
     -- Path to the websocat binary (relative to the plugin directory)
-    local websocat_path = vim.fn.fnamemodify(vim.fn.resolve(vim.fn.expand('<sfile>:p')), ':h:h:h') .. '/websocat.x86_64-unknown-linux-musl'
+    -- Get the plugin's root directory in a way that works regardless of where Neovim is opened
+    local plugin_root = vim.fn.fnamemodify(vim.api.nvim_get_runtime_file("lua/ninetyfive/init.lua", false)[1] or "", ":h:h:h")
+    local websocat_path = plugin_root .. '/websocat.x86_64-unknown-linux-musl'
+    log.debug("websocket", "Using websocat at: " .. websocat_path)
     
     -- Make sure the binary is executable
     vim.fn.system('chmod +x ' .. vim.fn.shellescape(websocat_path))
