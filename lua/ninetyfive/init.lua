@@ -22,22 +22,45 @@ local function set_ghost_text(bufnr, line, col)
   
   -- Function to send a message to the websocket
   local function send_websocket_message(message)
-    if _G.Ninetyfive.websocket_job and _G.Ninetyfive.websocket_job > 0 then
-      local success = vim.fn.chansend(_G.Ninetyfive.websocket_job, message .. "\n")
-      if success == 0 then
-        log.notify("websocket", vim.log.levels.ERROR, true, "Failed to send message to websocket")
-      else
-        log.debug("websocket", "Sent message to websocket: " .. message)
-        
-        -- Also append to the buffer if it exists
-        if _G.Ninetyfive.websocket_buffer and vim.api.nvim_buf_is_valid(_G.Ninetyfive.websocket_buffer) then
-          local line_count = vim.api.nvim_buf_line_count(_G.Ninetyfive.websocket_buffer)
-          vim.api.nvim_buf_set_lines(_G.Ninetyfive.websocket_buffer, line_count, line_count, false, {"Sent: " .. message})
-        end
-      end
-    else
-      log.notify("websocket", vim.log.levels.ERROR, true, "Websocket connection not established")
+    -- Check if the global table exists
+    if not _G.Ninetyfive then
+      log.debug("websocket", "Global Ninetyfive table not initialized")
+      return false
     end
+    
+    -- Check if websocket job exists and is valid
+    if not (_G.Ninetyfive.websocket_job and _G.Ninetyfive.websocket_job > 0) then
+      log.debug("websocket", "Websocket connection not established")
+      return false
+    end
+    
+    -- Use pcall to safely attempt to send the message
+    local ok, result = pcall(function()
+      return vim.fn.chansend(_G.Ninetyfive.websocket_job, message .. "\n")
+    end)
+    
+    -- Handle any errors that occurred
+    if not ok then
+      log.debug("websocket", "Error sending message: " .. tostring(result))
+      return false
+    end
+    
+    -- Check if the send was successful
+    if result == 0 then
+      log.debug("websocket", "Failed to send message to websocket")
+      return false
+    end
+    
+    -- Log success
+    log.debug("websocket", "Sent message to websocket: " .. message)
+    
+    -- Also append to the buffer if it exists
+    if _G.Ninetyfive.websocket_buffer and vim.api.nvim_buf_is_valid(_G.Ninetyfive.websocket_buffer) then
+      local line_count = vim.api.nvim_buf_line_count(_G.Ninetyfive.websocket_buffer)
+      vim.api.nvim_buf_set_lines(_G.Ninetyfive.websocket_buffer, line_count, line_count, false, {"Sent: " .. message})
+    end
+    
+    return true
   end
 
   -- Function to set up autocommands
@@ -52,13 +75,83 @@ local function set_ghost_text(bufnr, line, col)
       pattern = "*",
       group = ninetyfive_augroup,
       callback = function(args)
-        local bufnr = args.buf
-        local cursor = vim.api.nvim_win_get_cursor(0)
-        local line = cursor[1] - 1 -- Lua uses 0-based indexing for lines
-        local col = cursor[2] -- Column is 0-based
-  
-        -- Set the ghost text at the current cursor position
-        set_ghost_text(bufnr, line, col)
+        -- Use pcall to handle any errors in the callback
+        local ok, err = pcall(function()
+          local bufnr = args.buf
+          local cursor = vim.api.nvim_win_get_cursor(0)
+          local line = cursor[1] - 1 -- Lua uses 0-based indexing for lines
+          local col = cursor[2] -- Column is 0-based
+    
+          -- Set the ghost text at the current cursor position
+          set_ghost_text(bufnr, line, col)
+        end)
+        
+        -- Log any errors that occurred
+        if not ok then
+          log.debug("ghost_text", "Error in TextChanged/TextChangedI callback: " .. tostring(err))
+        end
+      end,
+    })
+    
+    -- Autocommand for cursor movement in insert mode
+    vim.api.nvim_create_autocmd({"CursorMovedI"}, {
+      pattern = "*",
+      group = ninetyfive_augroup,
+      callback = function(args)
+        -- Use pcall to handle any errors in the callback
+        local ok, err = pcall(function()
+          -- Check that we're connected
+          if not (_G.Ninetyfive and _G.Ninetyfive.websocket_job and _G.Ninetyfive.websocket_job > 0) then
+            log.debug("websocket", "Skipping delta-completion-request - websocket not connected")
+            return
+          end
+          
+          local bufnr = args.buf
+          local cursor = vim.api.nvim_win_get_cursor(0)
+          local line = cursor[1] - 1 -- Lua uses 0-based indexing for lines
+          local col = cursor[2] -- Column is 0-based
+          
+          -- Get buffer content from start to cursor position
+          local lines = vim.api.nvim_buf_get_lines(bufnr, 0, line + 1, false)
+          -- Adjust the last line to only include content up to the cursor
+          if #lines > 0 then
+            lines[#lines] = string.sub(lines[#lines], 1, col)
+          end
+          local content_to_cursor = table.concat(lines, '\n')
+          
+          -- Get byte position (length of content in bytes)
+          local pos = #content_to_cursor
+          
+          -- Get repo name from buffer path
+          local bufpath = vim.api.nvim_buf_get_name(bufnr)
+          local repo = "unknown"
+          -- Extract repo name from path if possible
+          local repo_match = string.match(bufpath, "/([^/]+)/[^/]+$")
+          if repo_match then
+            repo = repo_match
+          end
+          
+          -- Generate a request ID
+          local requestId = tostring(os.time()) .. "_" .. tostring(math.random(1000, 9999))
+          
+          -- Create delta-completion-request message
+          local message = vim.json.encode({
+            type = "delta-completion-request",
+            requestId = requestId,
+            repo = repo,
+            pos = pos
+          })
+          
+          -- Send the message to the websocket and check result
+          if not send_websocket_message(message) then
+            log.debug("websocket", "Failed to send delta-completion-request message")
+          end
+        end)
+        
+        -- Log any errors that occurred
+        if not ok then
+          log.debug("websocket", "Error in CursorMovedI callback: " .. tostring(err))
+        end
       end,
     })
     
@@ -67,25 +160,35 @@ local function set_ghost_text(bufnr, line, col)
       pattern = "*",
       group = ninetyfive_augroup,
       callback = function(args)
-        -- Check that we're connected
-        if not (_G.Ninetyfive.websocket_job and _G.Ninetyfive.websocket_job > 0) then
-          log.debug("websocket", "Skipping buffer message - websocket not connected")
-          return
+        -- Use pcall to handle any errors in the callback
+        local ok, err = pcall(function()
+          -- Check that we're connected
+          if not (_G.Ninetyfive and _G.Ninetyfive.websocket_job and _G.Ninetyfive.websocket_job > 0) then
+            log.debug("websocket", "Skipping buffer message - websocket not connected")
+            return
+          end
+          
+          local bufnr = args.buf
+          local bufname = vim.api.nvim_buf_get_name(bufnr)
+          local content = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), '\n')
+          
+          -- Create our file-content msg
+          local message = vim.json.encode({
+            type = "file-content",
+            path = bufname,
+            text = content
+          })
+          
+          -- Send the message to the websocket and check result
+          if not send_websocket_message(message) then
+            log.debug("websocket", "Failed to send file-content message")
+          end
+        end)
+        
+        -- Log any errors that occurred
+        if not ok then
+          log.debug("websocket", "Error in BufReadPost callback: " .. tostring(err))
         end
-        
-        local bufnr = args.buf
-        local bufname = vim.api.nvim_buf_get_name(bufnr)
-        local content = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), '\n')
-        
-        -- Create our file-content msg
-        local message = vim.json.encode({
-          type = "file-content",
-          path = bufname,
-          text = content
-        })
-        
-        -- Send the message to the websocket
-        send_websocket_message(message)
       end,
     })
   end
