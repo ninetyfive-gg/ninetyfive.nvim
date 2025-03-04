@@ -34,7 +34,6 @@ local function set_ghost_text(bufnr, line, col)
       return false
     end
     
-    -- Use pcall to safely attempt to send the message
     local ok, result = pcall(function()
       return vim.fn.chansend(_G.Ninetyfive.websocket_job, message .. "\n")
     end)
@@ -68,6 +67,7 @@ local function set_ghost_text(bufnr, line, col)
     log.debug("some.scope", "set_autocommands")
     
     -- Create an autogroup for Ninetyfive
+    -- https://www.youtube.com/watch?v=F6GNPOXpfwU
     local ninetyfive_augroup = vim.api.nvim_create_augroup("Ninetyfive", { clear = true })
     
     -- Autocommand for cursor movement and text changes
@@ -75,7 +75,6 @@ local function set_ghost_text(bufnr, line, col)
       pattern = "*",
       group = ninetyfive_augroup,
       callback = function(args)
-        -- Use pcall to handle any errors in the callback
         local ok, err = pcall(function()
           local bufnr = args.buf
           local cursor = vim.api.nvim_win_get_cursor(0)
@@ -98,7 +97,6 @@ local function set_ghost_text(bufnr, line, col)
       pattern = "*",
       group = ninetyfive_augroup,
       callback = function(args)
-        -- Use pcall to handle any errors in the callback
         local ok, err = pcall(function()
           -- Check that we're connected
           if not (_G.Ninetyfive and _G.Ninetyfive.websocket_job and _G.Ninetyfive.websocket_job > 0) then
@@ -160,7 +158,6 @@ local function set_ghost_text(bufnr, line, col)
       pattern = "*",
       group = ninetyfive_augroup,
       callback = function(args)
-        -- Use pcall to handle any errors in the callback
         local ok, err = pcall(function()
           -- Check that we're connected
           if not (_G.Ninetyfive and _G.Ninetyfive.websocket_job and _G.Ninetyfive.websocket_job > 0) then
@@ -215,7 +212,6 @@ local function set_ghost_text(bufnr, line, col)
     
     -- Create a buffer for websocket messages if it doesn't exist
     if not _G.Ninetyfive.websocket_buffer or not vim.api.nvim_buf_is_valid(_G.Ninetyfive.websocket_buffer) then
-        -- Use pcall to handle potential errors
         local ok, buf = pcall(vim.api.nvim_create_buf, false, true)
         if not ok then
             log.notify("websocket", vim.log.levels.ERROR, true, "Failed to create websocket buffer: " .. tostring(buf))
@@ -224,7 +220,6 @@ local function set_ghost_text(bufnr, line, col)
         
         _G.Ninetyfive.websocket_buffer = buf
         
-        -- Use pcall for setting buffer name too
         local ok2, err = pcall(vim.api.nvim_buf_set_name, buf, "NinetyfiveWebsocket")
         if not ok2 then
             log.debug("websocket", "Failed to set buffer name: " .. tostring(err))
