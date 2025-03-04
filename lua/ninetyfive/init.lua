@@ -1,6 +1,7 @@
 local main = require("ninetyfive.main")
 local config = require("ninetyfive.config")
 local log = require("ninetyfive.util.log")
+local state = require("ninetyfive.state")
 
 local Ninetyfive = {}
 
@@ -19,11 +20,37 @@ local function set_ghost_text(bufnr, line, col)
     })
   end
   
+  -- Function to send a message to the websocket
+  local function send_websocket_message(message)
+    if _G.Ninetyfive.websocket_job and _G.Ninetyfive.websocket_job > 0 then
+      local success = vim.fn.chansend(_G.Ninetyfive.websocket_job, message .. "\n")
+      if success == 0 then
+        log.notify("websocket", vim.log.levels.ERROR, true, "Failed to send message to websocket")
+      else
+        log.debug("websocket", "Sent message to websocket: " .. message)
+        
+        -- Also append to the buffer if it exists
+        if _G.Ninetyfive.websocket_buffer and vim.api.nvim_buf_is_valid(_G.Ninetyfive.websocket_buffer) then
+          local line_count = vim.api.nvim_buf_line_count(_G.Ninetyfive.websocket_buffer)
+          vim.api.nvim_buf_set_lines(_G.Ninetyfive.websocket_buffer, line_count, line_count, false, {"Sent: " .. message})
+        end
+      end
+    else
+      log.notify("websocket", vim.log.levels.ERROR, true, "Websocket connection not established")
+    end
+  end
+
   -- Function to set up autocommands
   local function setup_autocommands()
     log.debug("some.scope", "set_autocommands")
+    
+    -- Create an autogroup for Ninetyfive
+    local ninetyfive_augroup = vim.api.nvim_create_augroup("Ninetyfive", { clear = true })
+    
+    -- Autocommand for cursor movement and text changes
     vim.api.nvim_create_autocmd({"TextChanged", "TextChangedI"}, {
       pattern = "*",
+      group = ninetyfive_augroup,
       callback = function(args)
         local bufnr = args.buf
         local cursor = vim.api.nvim_win_get_cursor(0)
@@ -34,48 +61,44 @@ local function set_ghost_text(bufnr, line, col)
         set_ghost_text(bufnr, line, col)
       end,
     })
+    
+    -- Autocommand for new buffer creation
+    vim.api.nvim_create_autocmd({"BufReadPost"}, {
+      pattern = "*",
+      group = ninetyfive_augroup,
+      callback = function(args)
+        -- Check that we're connected
+        if not (_G.Ninetyfive.websocket_job and _G.Ninetyfive.websocket_job > 0) then
+          log.debug("websocket", "Skipping buffer message - websocket not connected")
+          return
+        end
+        
+        local bufnr = args.buf
+        local bufname = vim.api.nvim_buf_get_name(bufnr)
+        local content = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), '\n')
+        
+        -- Create our file-content msg
+        local message = vim.json.encode({
+          type = "file-content",
+          path = bufname,
+          text = content
+        })
+        
+        -- Send the message to the websocket
+        send_websocket_message(message)
+      end,
+    })
   end
-
---- Toggle the plugin by calling the `enable`/`disable` methods respectively.
-function Ninetyfive.toggle()
-    if _G.Ninetyfive.config == nil then
-        _G.Ninetyfive.config = config.options
-    end
-
-    main.toggle("public_api_toggle")
-end
-
---- Initializes the plugin, sets event listeners and internal state.
-function Ninetyfive.enable(scope)
-    if _G.Ninetyfive.config == nil then
-        _G.Ninetyfive.config = config.options
-    end
-
-    main.toggle(scope or "public_api_enable")
-end
-
---- Disables the plugin, clear highlight groups and autocmds, closes side buffers and resets the internal state.
-function Ninetyfive.disable()
-    main.toggle("public_api_disable")
-end
-
--- setup Ninetyfive options and merge them with user provided ones.
-function Ninetyfive.setup(opts)
-    _G.Ninetyfive.config = config.setup(opts)
-end
-
---- sets Ninetyfive with the provided API Key
----
----@param apiKey: the api key you want to use.
-function Ninetyfive.setApiKey(apiKey)
-    log.debug("some.scope", "Set api key called!!!!")
-    setup_autocommands()
-
+  
+  -- Function to set up websocket connection
+  local function setup_websocket_connection()
+    log.debug("websocket", "Setting up websocket connection")
+    
     -- Store the job ID for the websocket connection
     if _G.Ninetyfive.websocket_job then
-        -- Kill existing connection if there is one
-        vim.fn.jobstop(_G.Ninetyfive.websocket_job)
-        _G.Ninetyfive.websocket_job = nil
+      -- Kill existing connection if there is one
+      vim.fn.jobstop(_G.Ninetyfive.websocket_job)
+      _G.Ninetyfive.websocket_job = nil
     end
 
     -- Path to the websocat binary (relative to the plugin directory)
@@ -86,8 +109,21 @@ function Ninetyfive.setApiKey(apiKey)
     
     -- Create a buffer for websocket messages if it doesn't exist
     if not _G.Ninetyfive.websocket_buffer or not vim.api.nvim_buf_is_valid(_G.Ninetyfive.websocket_buffer) then
-        _G.Ninetyfive.websocket_buffer = vim.api.nvim_create_buf(false, true)
-        vim.api.nvim_buf_set_name(_G.Ninetyfive.websocket_buffer, "NinetyfiveWebsocket")
+        -- Use pcall to handle potential errors
+        local ok, buf = pcall(vim.api.nvim_create_buf, false, true)
+        if not ok then
+            log.notify("websocket", vim.log.levels.ERROR, true, "Failed to create websocket buffer: " .. tostring(buf))
+            return false
+        end
+        
+        _G.Ninetyfive.websocket_buffer = buf
+        
+        -- Use pcall for setting buffer name too
+        local ok2, err = pcall(vim.api.nvim_buf_set_name, buf, "NinetyfiveWebsocket")
+        if not ok2 then
+            log.debug("websocket", "Failed to set buffer name: " .. tostring(err))
+            -- Continue anyway, not critical
+        end
     end
     
     -- Clear the buffer
@@ -96,7 +132,7 @@ function Ninetyfive.setApiKey(apiKey)
     -- Add header to the buffer
     vim.api.nvim_buf_set_lines(_G.Ninetyfive.websocket_buffer, 0, -1, false, {
         "Ninetyfive Websocket Connection",
-        "Connected to: wss://api.ninetyfive.gg",
+        "Connected to: ws://127.0.0.1:1234",
         "-------------------------------------------",
         ""
     })
@@ -118,7 +154,7 @@ function Ninetyfive.setApiKey(apiKey)
     -- Start the websocat process
     _G.Ninetyfive.websocket_job = vim.fn.jobstart({
         websocat_path,
-        "wss://api.ninetyfive.gg"
+        "ws://127.0.0.1:1234"
     }, {
         on_stdout = function(_, data, _)
             if data and #data > 0 then
@@ -144,8 +180,8 @@ function Ninetyfive.setApiKey(apiKey)
     })
     
     if _G.Ninetyfive.websocket_job <= 0 then
-        log.error("websocket", "Failed to start websocat process")
-        return
+        log.notify("websocket", vim.log.levels.ERROR, true, "Failed to start websocat process")
+        return false
     end
     
     log.debug("websocket", "Started websocat process with job ID: " .. _G.Ninetyfive.websocket_job)
@@ -164,6 +200,60 @@ function Ninetyfive.setApiKey(apiKey)
     end, {})
     
     vim.notify("Ninetyfive websocket connection established. Use :NinetyfiveWebsocket to view messages.", vim.log.levels.INFO)
+    return true
+  end
+
+--- Toggle the plugin by calling the `enable`/`disable` methods respectively.
+function Ninetyfive.toggle()
+    if _G.Ninetyfive.config == nil then
+        _G.Ninetyfive.config = config.options
+    end
+
+    -- Check if the plugin is currently disabled
+    local was_disabled = not state:get_enabled()
+    
+    main.toggle("public_api_toggle")
+    
+    -- If the plugin was disabled and is now enabled, set up autocommands and websocket
+    if was_disabled and state:get_enabled() then
+        log.debug("toggle", "Setting up autocommands and websocket after toggle")
+        setup_autocommands()
+        setup_websocket_connection()
+    end
+end
+
+--- Initializes the plugin, sets event listeners and internal state.
+function Ninetyfive.enable(scope)
+    if _G.Ninetyfive.config == nil then
+        _G.Ninetyfive.config = config.options
+    end
+
+    log.debug("init", "about to set up our stuff")
+    
+    -- Set up autocommands when plugin is enabled
+    setup_autocommands()
+    
+    -- Set up websocket connection
+    setup_websocket_connection()
+      
+    main.toggle(scope or "public_api_enable")
+end
+
+--- Disables the plugin, clear highlight groups and autocmds, closes side buffers and resets the internal state.
+function Ninetyfive.disable()
+    main.toggle("public_api_disable")
+end
+
+-- setup Ninetyfive options and merge them with user provided ones.
+function Ninetyfive.setup(opts)
+    _G.Ninetyfive.config = config.setup(opts)
+end
+
+--- sets Ninetyfive with the provided API Key
+---
+---@param apiKey: the api key you want to use.
+function Ninetyfive.setApiKey(apiKey)
+    log.debug("some.scope", "Set api key called!!!!")
 end
 
 _G.Ninetyfive = Ninetyfive
