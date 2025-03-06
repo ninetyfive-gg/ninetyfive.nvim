@@ -50,7 +50,6 @@ local function set_ghost_text(bufnr, line, col)
       return false
     end
     
-    -- Log success
     log.debug("websocket", "Sent message to websocket: " .. message)
     
     -- Also append to the buffer if it exists
@@ -85,7 +84,6 @@ local function set_ghost_text(bufnr, line, col)
           set_ghost_text(bufnr, line, col)
         end)
         
-        -- Log any errors that occurred
         if not ok then
           log.debug("ghost_text", "Error in TextChanged/TextChangedI callback: " .. tostring(err))
         end
@@ -120,11 +118,10 @@ local function set_ghost_text(bufnr, line, col)
           -- Get byte position (length of content in bytes)
           local pos = #content_to_cursor
           
-          -- Get repo name from buffer path
-          local bufpath = vim.api.nvim_buf_get_name(bufnr)
+          -- Repo is the cwd? Is this generally correct with how people use neovim?
+          local cwd = vim.fn.getcwd()
           local repo = "unknown"
-          -- Extract repo name from path if possible
-          local repo_match = string.match(bufpath, "/([^/]+)/[^/]+$")
+          local repo_match = string.match(cwd, "/([^/]+)$")
           if repo_match then
             repo = repo_match
           end
@@ -132,7 +129,6 @@ local function set_ghost_text(bufnr, line, col)
           -- Generate a request ID
           local requestId = tostring(os.time()) .. "_" .. tostring(math.random(1000, 9999))
           
-          -- Create delta-completion-request message
           local message = vim.json.encode({
             type = "delta-completion-request",
             requestId = requestId,
@@ -140,13 +136,11 @@ local function set_ghost_text(bufnr, line, col)
             pos = pos
           })
           
-          -- Send the message to the websocket and check result
           if not send_websocket_message(message) then
             log.debug("websocket", "Failed to send delta-completion-request message")
           end
         end)
         
-        -- Log any errors that occurred
         if not ok then
           log.debug("websocket", "Error in CursorMovedI callback: " .. tostring(err))
         end
@@ -169,20 +163,17 @@ local function set_ghost_text(bufnr, line, col)
           local bufname = vim.api.nvim_buf_get_name(bufnr)
           local content = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), '\n')
           
-          -- Create our file-content msg
           local message = vim.json.encode({
             type = "file-content",
             path = bufname,
             text = content
           })
           
-          -- Send the message to the websocket and check result
           if not send_websocket_message(message) then
             log.debug("websocket", "Failed to send file-content message")
           end
         end)
         
-        -- Log any errors that occurred
         if not ok then
           log.debug("websocket", "Error in BufReadPost callback: " .. tostring(err))
         end
@@ -248,7 +239,6 @@ local function set_ghost_text(bufnr, line, col)
         local line_count = vim.api.nvim_buf_line_count(_G.Ninetyfive.websocket_buffer)
         vim.api.nvim_buf_set_lines(_G.Ninetyfive.websocket_buffer, line_count, line_count, false, lines)
         
-        -- Log the message as well
         log.debug("websocket", message)
     end
     
