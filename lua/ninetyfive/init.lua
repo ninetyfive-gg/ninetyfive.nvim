@@ -6,6 +6,8 @@ local state = require("ninetyfive.state")
 local Ninetyfive = {}
 
 local ninetyfive_ns = vim.api.nvim_create_namespace("ninetyfive_ghost_ns")
+-- Variable to store aggregated ghost text
+local aggregated_ghost_text = ""
 
 local function set_ghost_text(bufnr, line, col)
     -- Clear any existing extmarks in the buffer
@@ -69,27 +71,6 @@ local function set_ghost_text(bufnr, line, col)
     -- https://www.youtube.com/watch?v=F6GNPOXpfwU
     local ninetyfive_augroup = vim.api.nvim_create_augroup("Ninetyfive", { clear = true })
     
-    -- Autocommand for cursor movement and text changes
-    vim.api.nvim_create_autocmd({"TextChanged", "TextChangedI"}, {
-      pattern = "*",
-      group = ninetyfive_augroup,
-      callback = function(args)
-        local ok, err = pcall(function()
-          local bufnr = args.buf
-          local cursor = vim.api.nvim_win_get_cursor(0)
-          local line = cursor[1] - 1 -- Lua uses 0-based indexing for lines
-          local col = cursor[2] -- Column is 0-based
-    
-          -- Set the ghost text at the current cursor position
-          set_ghost_text(bufnr, line, col)
-        end)
-        
-        if not ok then
-          log.debug("ghost_text", "Error in TextChanged/TextChangedI callback: " .. tostring(err))
-        end
-      end,
-    })
-    
     -- Autocommand for cursor movement in insert mode
     vim.api.nvim_create_autocmd({"CursorMovedI"}, {
       pattern = "*",
@@ -128,6 +109,9 @@ local function set_ghost_text(bufnr, line, col)
           
           -- Generate a request ID
           local requestId = tostring(os.time()) .. "_" .. tostring(math.random(1000, 9999))
+          
+          -- Clear the aggregated ghost text when sending a new completion request
+          aggregated_ghost_text = ""
           
           local message = vim.json.encode({
             type = "delta-completion-request",
@@ -245,13 +229,50 @@ local function set_ghost_text(bufnr, line, col)
     -- Start the websocat process
     _G.Ninetyfive.websocket_job = vim.fn.jobstart({
         websocat_path,
-        "ws://127.0.0.1:1234"
+        "wss://api.ninetyfive.gg"
     }, {
         on_stdout = function(_, data, _)
             if data and #data > 0 then
                 local message = table.concat(data, "\n")
                 if message ~= "" then
                     append_to_buffer("Received: " .. message)
+                    
+                    -- Try to parse the message as JSON
+                    local ok, parsed = pcall(vim.json.decode, message)
+                    if ok and parsed then
+                        -- Check if the message has a type field
+                        if parsed.type then
+                            -- Handle specific message types
+                            if parsed.type == "get-commit" or parsed.type == "get-blob" or parsed.type == "subscription-info" then
+                                log.debug("websocket", "Received message of type: " .. parsed.type)
+                                -- Just print for now
+                                print("Received message of type: " .. parsed.type)
+                            end
+                        else
+                            -- No type field, assume it's a completion request
+                            -- Check if it has a 'v' field for ghost text
+                            if parsed.v then
+                                print("Received completion :o")
+                                
+                                -- Aggregate the ghost text
+                                aggregated_ghost_text = aggregated_ghost_text .. parsed.v
+                                
+                                -- Get current buffer and cursor position
+                                local bufnr = vim.api.nvim_get_current_buf()
+                                local cursor = vim.api.nvim_win_get_cursor(0)
+                                local line = cursor[1] - 1 -- Lua uses 0-based indexing for lines
+                                local col = cursor[2] -- Column is 0-based
+                                
+                                -- Set ghost text with the aggregated content
+                                vim.api.nvim_buf_clear_namespace(bufnr, ninetyfive_ns, 0, -1)
+                                vim.api.nvim_buf_set_extmark(bufnr, ninetyfive_ns, line, col, {
+                                    virt_text = {{aggregated_ghost_text, "Comment"}},
+                                    virt_text_pos = "overlay",
+                                    hl_mode = "combine",
+                                })
+                            end
+                        end
+                    end
                 end
             end
         end,
