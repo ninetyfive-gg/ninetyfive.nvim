@@ -156,11 +156,6 @@ function Websocket.setup_autocommands()
                 return
             end
 
-            -- Otherwise, use the existing one
-            local current_completion = Queue.pop(completion_queue)
-            if current_completion ~= nil then
-                suggestion.show(current_completion.completion)
-            end
         end,
     })
 
@@ -262,10 +257,15 @@ function Websocket.setup_connection(server_uri)
 
                                         local line = completion:sub(1, new_line_idx - 1)
                                         Queue.append(completion_queue, line, false)
-                                        print("presub completion is", completion)
                                         completion = string.sub(completion, 1, new_line_idx)
-                                        print("completion is", completion)
+                                        print("got a line to show", completion)
                                     end
+                                end
+
+                                -- We could have a suggestion here, try to show it
+                                local current_completion = Queue.pop(completion_queue)
+                                if current_completion ~= nil then
+                                    suggestion.show(current_completion.completion)
                                 end
 
                             end
