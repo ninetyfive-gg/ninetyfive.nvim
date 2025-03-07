@@ -4,6 +4,7 @@ local Websocket = {}
 
 -- Variable to store aggregated ghost text
 local completion = ""
+local request_id = ""
 local ninetyfive_ns = vim.api.nvim_create_namespace("ninetyfive_ghost_ns")
 
 -- Function to set ghost text in the buffer
@@ -54,6 +55,65 @@ function Websocket.send_message(message)
     return true
 end
 
+local function request_completion(args)
+    local ok, err = pcall(function()
+        -- Check that we're connected
+        if
+            not (_G.Ninetyfive and _G.Ninetyfive.websocket_job and _G.Ninetyfive.websocket_job > 0)
+        then
+            log.debug("websocket", "Skipping delta-completion-request - websocket not connected")
+            return
+        end
+
+        local bufnr = args.buf
+        local cursor = vim.api.nvim_win_get_cursor(0)
+        local line = cursor[1] - 1 -- Lua uses 0-based indexing for lines
+        local col = cursor[2] -- Column is 0-based
+
+        -- Get buffer content from start to cursor position
+        local lines = vim.api.nvim_buf_get_lines(bufnr, 0, line + 1, false)
+        -- Adjust the last line to only include content up to the cursor
+        if #lines > 0 then
+            lines[#lines] = string.sub(lines[#lines], 1, col)
+        end
+        local content_to_cursor = table.concat(lines, "\n")
+
+        -- Get byte position (length of content in bytes)
+        local pos = #content_to_cursor
+
+        -- Repo is the cwd? Is this generally correct with how people use neovim?
+        local cwd = vim.fn.getcwd()
+        local repo = "unknown"
+        local repo_match = string.match(cwd, "/([^/]+)$")
+        if repo_match then
+            repo = repo_match
+        end
+
+        -- Generate a request ID
+        request_id = tostring(os.time()) .. "_" .. tostring(math.random(1000, 9999))
+
+        -- Clear the aggregated ghost text when sending a new completion request
+        completion = ""
+
+        local message = vim.json.encode({
+            type = "delta-completion-request",
+            requestId = request_id,
+            repo = repo,
+            pos = pos,
+        })
+
+        print("delta-completion-request sent")
+        if not Websocket.send_message(message) then
+            log.debug("websocket", "Failed to send delta-completion-request message")
+        end
+    end)
+
+    if not ok then
+        print("err", tostring(err))
+        log.debug("websocket", "Error in CursorMovedI callback: " .. tostring(err))
+    end
+end
+
 -- Function to set up autocommands related to websocket functionality
 function Websocket.setup_autocommands()
     -- Create an autogroup for Ninetyfive
@@ -61,71 +121,23 @@ function Websocket.setup_autocommands()
     local ninetyfive_augroup = vim.api.nvim_create_augroup("Ninetyfive", { clear = true })
 
     -- Autocommand for cursor movement in insert mode
+    -- CursorMovedI does not seem to trigger when you type in insert mode!!
     vim.api.nvim_create_autocmd({ "CursorMovedI" }, {
         pattern = "*",
         group = ninetyfive_augroup,
         callback = function(args)
-            local ok, err = pcall(function()
-                -- Check that we're connected
-                if
-                    not (
-                        _G.Ninetyfive
-                        and _G.Ninetyfive.websocket_job
-                        and _G.Ninetyfive.websocket_job > 0
-                    )
-                then
-                    log.debug(
-                        "websocket",
-                        "Skipping delta-completion-request - websocket not connected"
-                    )
-                    return
-                end
+            print("CursorMovedI")
+            request_completion(args)
+        end,
+    })
 
-                local bufnr = args.buf
-                local cursor = vim.api.nvim_win_get_cursor(0)
-                local line = cursor[1] - 1 -- Lua uses 0-based indexing for lines
-                local col = cursor[2] -- Column is 0-based
-
-                -- Get buffer content from start to cursor position
-                local lines = vim.api.nvim_buf_get_lines(bufnr, 0, line + 1, false)
-                -- Adjust the last line to only include content up to the cursor
-                if #lines > 0 then
-                    lines[#lines] = string.sub(lines[#lines], 1, col)
-                end
-                local content_to_cursor = table.concat(lines, "\n")
-
-                -- Get byte position (length of content in bytes)
-                local pos = #content_to_cursor
-
-                -- Repo is the cwd? Is this generally correct with how people use neovim?
-                local cwd = vim.fn.getcwd()
-                local repo = "unknown"
-                local repo_match = string.match(cwd, "/([^/]+)$")
-                if repo_match then
-                    repo = repo_match
-                end
-
-                -- Generate a request ID
-                local requestId = tostring(os.time()) .. "_" .. tostring(math.random(1000, 9999))
-
-                -- Clear the aggregated ghost text when sending a new completion request
-                completion = ""
-
-                local message = vim.json.encode({
-                    type = "delta-completion-request",
-                    requestId = requestId,
-                    repo = repo,
-                    pos = pos,
-                })
-
-                if not Websocket.send_message(message) then
-                    log.debug("websocket", "Failed to send delta-completion-request message")
-                end
-            end)
-
-            if not ok then
-                log.debug("websocket", "Error in CursorMovedI callback: " .. tostring(err))
-            end
+    vim.api.nvim_create_autocmd({ "TextChangedI" }, {
+        pattern = "*",
+        group = ninetyfive_augroup,
+        callback = function(args)
+            -- TODO here we should check if we need to send a delta
+            print("TextChangedI")
+            request_completion(args)
         end,
     })
 
@@ -212,10 +224,10 @@ function Websocket.setup_connection(server_uri)
                                 print("Received message of type: " .. parsed.type)
                             end
                         else
-                            if parsed.v then
+                            if parsed.v and parsed.r == request_id then
                                 print("Received completion :o")
-
-                                completion = completion .. parsed.v
+                                --TODO check `parsed.v == vim.NIL`
+                                completion = completion .. tostring(parsed.v)
 
                                 -- Get current buffer and cursor position
                                 local bufnr = vim.api.nvim_get_current_buf()
