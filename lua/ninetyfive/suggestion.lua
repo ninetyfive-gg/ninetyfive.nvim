@@ -6,6 +6,7 @@ suggestion.show = function(bufnr, line, col, message)
   vim.api.nvim_buf_clear_namespace(bufnr, ninetyfive_ns, 0, -1)
 
   local virt_lines = {}
+  print("[suggestion.show] message:", message)
   for _, l in ipairs(vim.fn.split(message, '\n')) do
       table.insert(virt_lines, { { l, type(c) == 'table' and c.hl_group or 'Comment' } })
   end
@@ -89,8 +90,9 @@ suggestion.accept = function()
   end
 end
 
-suggestion.clear = function(bufnr)
-  vim.api.nvim_buf_clear_namespace(bufnr, ninetyfive_ns, 0, -1)
+suggestion.clear = function()
+  local buffer = vim.api.nvim_get_current_buf()
+  vim.api.nvim_buf_clear_namespace(buffer, ninetyfive_ns, 0, -1)
 end
 
 return suggestion
