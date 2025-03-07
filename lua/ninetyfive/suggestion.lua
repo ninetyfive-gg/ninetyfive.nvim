@@ -1,6 +1,8 @@
 local suggestion = {}
 local ninetyfive_ns = vim.api.nvim_create_namespace("ninetyfive_ghost_ns")
 
+local completion_id = ""
+
 suggestion.show = function(message)
     local bufnr = vim.api.nvim_get_current_buf()
     local cursor = vim.api.nvim_win_get_cursor(0)
@@ -30,7 +32,7 @@ suggestion.show = function(message)
 end
 
 suggestion.accept = function()
-    if not completion_id then
+    if completion_id == "" then
         return
     end
 
@@ -92,9 +94,7 @@ suggestion.accept = function()
             vim.api.nvim_buf_set_text(bufnr, line, col, line, col, { extmark_text })
         end
 
-        completion_id = nil
-        completion = ""
-        request_id = ""
+        completion_id = ""
     end
 end
 

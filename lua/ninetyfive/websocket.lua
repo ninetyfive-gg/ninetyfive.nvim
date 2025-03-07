@@ -5,7 +5,6 @@ local suggestion = require("ninetyfive.suggestion")
 local Websocket = {}
 
 -- Variable to store aggregated ghost text
-local completion_id = ""
 local completion = ""
 local request_id = ""
 local completion_queue = Queue.New()
@@ -117,6 +116,8 @@ function Websocket.setup_autocommands()
     -- Make accept_completion available globally
     _G.accept_ninetyfive_completion = function()
         suggestion.accept()
+        completion = ""
+        request_id = ""
         return "" -- This is important for expr mappings to not insert anything
     end
 
