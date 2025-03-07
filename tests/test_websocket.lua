@@ -4,6 +4,8 @@ local eq = MiniTest.expect.equality
 -- Ensure the global table exists
 _G.Ninetyfive = _G.Ninetyfive or {}
 
+-- Using the 'busted' style ad it looks nicer imo
+-- See: https://github.com/echasnovski/mini.nvim/blob/main/TESTING.md
 describe("websocket", function()
     before_each(function()
         -- Make sure the global table exists before accessing its properties
