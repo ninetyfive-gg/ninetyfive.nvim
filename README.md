@@ -1,32 +1,10 @@
-<p align="center">
-  <h1 align="center">ninetyfive.nvim</h2>
-</p>
+# ninetyfive.nvim
 
-<p align="center">
-    > A catch phrase that describes your plugin.
-</p>
-
-<div align="center">
-    > Drag your video (<10MB) here to host it for free on GitHub.
-</div>
-
-<div align="center">
-
-> Videos don't work on GitHub mobile, so a GIF alternative can help users.
-
-_[GIF version of the showcase video for mobile users](SHOWCASE_GIF_LINK)_
+Very fast autocomplete
 
 </div>
 
-## ⚡️ Features
-
-> Write short sentences describing your plugin features
-
-- FEATURE 1
-- FEATURE ..
-- FEATURE N
-
-## 📋 Installation
+## Installation
 
 <div align="center">
 <table>
@@ -92,41 +70,8 @@ require("lazy").setup({"ninetyfive.nvim"})
 </table>
 </div>
 
-## ☄ Getting started
+## Commands
 
-> Describe how to use the plugin the simplest way
-
-## ⚙ Configuration
-
-> The configuration list sometimes become cumbersome, making it folded by default reduce the noise of the README file.
-
-<details>
-<summary>Click to unfold the full list of options with their default values</summary>
-
-> **Note**: The options are also available in Neovim by calling `:h ninetyfive.options`
-
-```lua
-require("ninetyfive").setup({
-    -- you can copy the full list from lua/ninetyfive/config.lua
-})
-```
-
-</details>
-
-## 🧰 Commands
-
-|   Command   |         Description        |
-|-------------|----------------------------|
-|  `:Toggle`  |     Enables the plugin.    |
-
-## ⌨ Contributing
-
-PRs and issues are always welcome. Make sure to provide as much context as possible when opening one.
-
-## 🗞 Wiki
-
-You can find guides and showcase of the plugin on [the Wiki](https://github.com/ninetyfive-gg/ninetyfive.nvim/wiki)
-
-## 🎭 Motivations
-
-> If alternatives of your plugin exist, you can provide some pros/cons of using yours over the others.
+| Command       | Description         |
+| ------------- | ------------------- |
+| `:Ninetyfive` | Enables the plugin. |
