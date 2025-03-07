@@ -31,8 +31,6 @@ function Ninetyfive.enable(scope)
         _G.Ninetyfive.config = config.options
     end
 
-    log.debug("init", "about to set up our stuff")
-    
     -- Set up autocommands when plugin is enabled
     websocket.setup_autocommands()
     
@@ -56,7 +54,7 @@ end
 ---
 ---@param apiKey: the api key you want to use.
 function Ninetyfive.setApiKey(apiKey)
-    log.debug("some.scope", "Set api key called!!!!")
+    log.debug("init.lua", "Set api key called!!!!")
 end
 
 _G.Ninetyfive = Ninetyfive
