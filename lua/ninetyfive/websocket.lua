@@ -159,12 +159,7 @@ function Websocket.setup_autocommands()
             -- Otherwise, use the existing one
             local current_completion = Queue.pop(completion_queue)
             if current_completion ~= nil then
-                local bufnr = vim.api.nvim_get_current_buf()
-                local cursor = vim.api.nvim_win_get_cursor(0)
-                local line = cursor[1] - 1
-                local col = cursor[2]
-
-                suggestion.show(bufnr, line, col, current_completion.completion)
+                suggestion.show(current_completion.completion)
             end
         end,
     })

@@ -1,7 +1,12 @@
 local suggestion = {}
 local ninetyfive_ns = vim.api.nvim_create_namespace("ninetyfive_ghost_ns")
 
-suggestion.show = function(bufnr, line, col, message) 
+suggestion.show = function(message)
+  local bufnr = vim.api.nvim_get_current_buf()
+  local cursor = vim.api.nvim_win_get_cursor(0)
+  local line = cursor[1] - 1
+  local col = cursor[2]
+
   -- Clear any existing extmarks in the buffer
   vim.api.nvim_buf_clear_namespace(bufnr, ninetyfive_ns, 0, -1)
 
