@@ -1,4 +1,5 @@
 local log = require("ninetyfive.util.log")
+local Queue = require("ninetyfive.queue")
 
 local Websocket = {}
 
@@ -7,6 +8,7 @@ local completion_id = ""
 local completion = ""
 local request_id = ""
 local ninetyfive_ns = vim.api.nvim_create_namespace("ninetyfive_ghost_ns")
+local completion_queue = Queue.New() 
 
 -- Function to set ghost text in the buffer
 local function set_ghost_text(bufnr, line, col, message)
@@ -17,7 +19,7 @@ local function set_ghost_text(bufnr, line, col, message)
     -- https://neovim.io/doc/user/api.html#nvim_buf_set_extmark()
     completion_id = vim.api.nvim_buf_set_extmark(bufnr, ninetyfive_ns, line, col, {
         virt_text = { { message, "Comment" } }, -- "Comment" is the highlight group
-        virt_text_pos = "overlay", -- Display the text at the end of the line
+        virt_text_pos = "inline", -- Display the text at the end of the line
         hl_mode = "combine", -- Combine with existing highlights
     })
 end
@@ -151,10 +153,12 @@ local function request_completion(args)
             pos = pos,
         })
 
-        print("delta-completion-request sent")
+        print("delta-completion-request sent", request_id, repo, pos)
         if not Websocket.send_message(message) then
             log.debug("websocket", "Failed to send delta-completion-request message")
         end
+
+        Queue.clear(completion_queue)
     end)
 
     if not ok then
@@ -287,19 +291,40 @@ function Websocket.setup_connection(server_uri)
                         else
                             if parsed.v and parsed.r == request_id then
                                 print("Received completion :o")
-                                print("completion", completion)
-                                if parsed.v == vim.NIL and completion ~= "" then
-                                    print("got nil, with completion ready")
-                                    -- Get current buffer and cursor position
-                                    local bufnr = vim.api.nvim_get_current_buf()
-                                    local cursor = vim.api.nvim_win_get_cursor(0)
-                                    local line = cursor[1] - 1 -- Lua uses 0-based indexing for lines
-                                    local col = cursor[2] -- Column is 0-based
+                                
+                                print("qqqq len", Queue.length(completion_queue))
+                                if parsed.v == vim.NIL then
+                                    print("nil, append terminal", completion)
+                                    Queue.append(completion_queue, completion, true)
+                                else
+                                    completion = completion .. tostring(parsed.v)
+                                    print("not nil completion", completion)
+                                    print("q len", Queue.length(completion_queue))
+                                    print("has line break", string.find(parsed.v, "\n"))
+                                    if Queue.length(completion_queue) == 0 and string.find(parsed.v, "\n") then
+                                        local new_line_idx = completion:match(".*\n()") or -1
+                                        print("new_line_idx", new_line_idx)
 
-                                    set_ghost_text(bufnr, line, col, completion)
+                                        if new_line_idx == 1 then
+                                            return
+                                        end
+
+                                        local line = completion:sub(1, new_line_idx - 1)
+                                        Queue.append(completion_queue, line, false)
+                                        print("append", line)
+                                        print("presub completion is", completion)
+                                        completion = string.sub(completion, 1, new_line_idx)
+                                        print("completion is", completion)
+                                        -- We can show
+                                        local bufnr = vim.api.nvim_get_current_buf()
+                                        local cursor = vim.api.nvim_win_get_cursor(0)
+                                        local line = cursor[1] - 1 -- Lua uses 0-based indexing for lines
+                                        local col = cursor[2] -- Column is 0-based
+
+                                        set_ghost_text(bufnr, line, col, completion)
+                                    end
                                 end
-                                --TODO check `parsed.v == vim.NIL`
-                                completion = completion .. tostring(parsed.v)
+
                             end
                         end
                     end
