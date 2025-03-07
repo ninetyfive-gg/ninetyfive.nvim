@@ -9,14 +9,14 @@ local ninetyfive_ns = vim.api.nvim_create_namespace("ninetyfive_ghost_ns")
 -- Variable to store aggregated ghost text
 local aggregated_ghost_text = ""
 
-local function set_ghost_text(bufnr, line, col)
+local function set_ghost_text(bufnr, line, col, message)
     -- Clear any existing extmarks in the buffer
     vim.api.nvim_buf_clear_namespace(bufnr, ninetyfive_ns, 0, -1)
   
     -- Set the ghost text using an extmark
     -- https://neovim.io/doc/user/api.html#nvim_buf_set_extmark()
     vim.api.nvim_buf_set_extmark(bufnr, ninetyfive_ns, line, col, {
-      virt_text = {{"hello world", "Comment"}}, -- "Comment" is the highlight group
+      virt_text = {{message, "Comment"}}, -- "Comment" is the highlight group
       virt_text_pos = "overlay", -- Display the text at the end of the line
       hl_mode = "combine", -- Combine with existing highlights
     })
@@ -65,8 +65,6 @@ local function set_ghost_text(bufnr, line, col)
 
   -- Function to set up autocommands
   local function setup_autocommands()
-    log.debug("some.scope", "set_autocommands")
-    
     -- Create an autogroup for Ninetyfive
     -- https://www.youtube.com/watch?v=F6GNPOXpfwU
     local ninetyfive_augroup = vim.api.nvim_create_augroup("Ninetyfive", { clear = true })
@@ -221,12 +219,7 @@ local function set_ghost_text(bufnr, line, col)
                                 local col = cursor[2] -- Column is 0-based
                                 
                                 -- Set ghost text with the aggregated content
-                                vim.api.nvim_buf_clear_namespace(bufnr, ninetyfive_ns, 0, -1)
-                                vim.api.nvim_buf_set_extmark(bufnr, ninetyfive_ns, line, col, {
-                                    virt_text = {{aggregated_ghost_text, "Comment"}},
-                                    virt_text_pos = "overlay",
-                                    hl_mode = "combine",
-                                })
+                                set_ghost_text(bufnr, line, col, aggregated_ghost_text)
                             end
                         end
                     end
