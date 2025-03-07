@@ -291,19 +291,12 @@ function Websocket.setup_connection(server_uri)
                         else
                             if parsed.v and parsed.r == request_id then
                                 print("Received completion :o")
-                                
-                                print("qqqq len", Queue.length(completion_queue))
                                 if parsed.v == vim.NIL then
-                                    print("nil, append terminal", completion)
                                     Queue.append(completion_queue, completion, true)
                                 else
                                     completion = completion .. tostring(parsed.v)
-                                    print("not nil completion", completion)
-                                    print("q len", Queue.length(completion_queue))
-                                    print("has line break", string.find(parsed.v, "\n"))
                                     if Queue.length(completion_queue) == 0 and string.find(parsed.v, "\n") then
                                         local new_line_idx = completion:match(".*\n()") or -1
-                                        print("new_line_idx", new_line_idx)
 
                                         if new_line_idx == 1 then
                                             return
@@ -311,15 +304,14 @@ function Websocket.setup_connection(server_uri)
 
                                         local line = completion:sub(1, new_line_idx - 1)
                                         Queue.append(completion_queue, line, false)
-                                        print("append", line)
                                         print("presub completion is", completion)
                                         completion = string.sub(completion, 1, new_line_idx)
                                         print("completion is", completion)
                                         -- We can show
                                         local bufnr = vim.api.nvim_get_current_buf()
                                         local cursor = vim.api.nvim_win_get_cursor(0)
-                                        local line = cursor[1] - 1 -- Lua uses 0-based indexing for lines
-                                        local col = cursor[2] -- Column is 0-based
+                                        local line = cursor[1] - 1
+                                        local col = cursor[2] - 1 -- Is this -1 correct
 
                                         set_ghost_text(bufnr, line, col, completion)
                                     end
