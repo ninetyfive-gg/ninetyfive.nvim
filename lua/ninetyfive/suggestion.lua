@@ -15,7 +15,7 @@ suggestion.show = function(message)
     local virt_lines = {}
     print("[suggestion.show] message:", message)
     for _, l in ipairs(vim.fn.split(message, "\n")) do
-        table.insert(virt_lines, { { l, type(c) == "table" and c.hl_group or "Comment" } })
+        table.insert(virt_lines, { { l, "Comment" } })
     end
     local first_line = table.remove(virt_lines, 1)
 
