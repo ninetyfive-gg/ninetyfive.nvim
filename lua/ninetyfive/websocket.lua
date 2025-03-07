@@ -8,7 +8,7 @@ local Websocket = {}
 local completion_id = ""
 local completion = ""
 local request_id = ""
-local completion_queue = Queue.New() 
+local completion_queue = Queue.New()
 
 -- Function to send a message to the websocket
 function Websocket.send_message(message)
@@ -117,12 +117,17 @@ function Websocket.setup_autocommands()
     -- Make accept_completion available globally
     _G.accept_ninetyfive_completion = function()
         suggestion.accept()
-        return ""  -- This is important for expr mappings to not insert anything
+        return "" -- This is important for expr mappings to not insert anything
     end
-    
+
     -- Set up the Tab key mapping
-    vim.api.nvim_set_keymap("i", "<Tab>", "<Cmd>lua _G.accept_ninetyfive_completion()<CR>", { noremap = true, silent = true })
-    
+    vim.api.nvim_set_keymap(
+        "i",
+        "<Tab>",
+        "<Cmd>lua _G.accept_ninetyfive_completion()<CR>",
+        { noremap = true, silent = true }
+    )
+
     -- Autocommand for cursor movement in insert mode
     -- CursorMovedI does not seem to trigger when you type in insert mode!!
     vim.api.nvim_create_autocmd({ "CursorMovedI" }, {
@@ -148,14 +153,13 @@ function Websocket.setup_autocommands()
 
             -- Clear old ones
             suggestion.clear()
-            
+
             -- Check if there's an active completion?
             print("request_id", request_id, "length", Queue.length(completion_queue))
             if request_id == "" and Queue.length(completion_queue) == 0 then
                 request_completion(args)
                 return
             end
-
         end,
     })
 
@@ -248,7 +252,10 @@ function Websocket.setup_connection(server_uri)
                                     Queue.append(completion_queue, completion, true)
                                 else
                                     completion = completion .. tostring(parsed.v)
-                                    if Queue.length(completion_queue) == 0 and string.find(parsed.v, "\n") then
+                                    if
+                                        Queue.length(completion_queue) == 0
+                                        and string.find(parsed.v, "\n")
+                                    then
                                         local new_line_idx = completion:match(".*\n()") or -1
 
                                         if new_line_idx == 1 then
@@ -267,7 +274,6 @@ function Websocket.setup_connection(server_uri)
                                 if current_completion ~= nil then
                                     suggestion.show(current_completion.completion)
                                 end
-
                             end
                         end
                     end
