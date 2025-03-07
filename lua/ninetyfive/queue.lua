@@ -20,7 +20,9 @@ end
 
 function Queue.pop (queue)
   local first = queue.first
-  if first > queue.last then error("queue is empty") end
+  if first > queue.last then 
+    return nil 
+  end
   local value = queue[first]
   queue[first] = nil
   queue.first = first + 1
