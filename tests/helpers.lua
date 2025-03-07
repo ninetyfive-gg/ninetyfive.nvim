@@ -71,6 +71,10 @@ Helpers.expect.match = MiniTest.new_expectation("string matching", function(str,
     return str:find(pattern) ~= nil
 end, error_message)
 
+Helpers.expect.match_bool = MiniTest.new_expectation("bool equals", function(got, want)
+    return got == want
+end, error_message)
+
 Helpers.expect.no_match = MiniTest.new_expectation("no string matching", function(str, pattern)
     return str:find(pattern) == nil
 end, error_message)
