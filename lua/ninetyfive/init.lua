@@ -14,9 +14,9 @@ function Ninetyfive.toggle()
 
     -- Check if the plugin is currently disabled
     local was_disabled = not state:get_enabled()
-    
+
     main.toggle("public_api_toggle")
-    
+
     -- If the plugin was disabled and is now enabled, set up autocommands and websocket
     if was_disabled and state:get_enabled() then
         log.debug("toggle", "Setting up autocommands and websocket after toggle")
@@ -33,10 +33,10 @@ function Ninetyfive.enable(scope)
 
     -- Set up autocommands when plugin is enabled
     websocket.setup_autocommands()
-    
+
     -- Set up websocket connection
     websocket.setup_connection("wss://api.ninetyfive.gg")
-      
+
     main.toggle(scope or "public_api_enable")
 end
 

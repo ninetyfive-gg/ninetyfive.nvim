@@ -21,8 +21,7 @@ local defaults = vim.deepcopy(Ninetyfive.options)
 ---
 ---@private
 function Ninetyfive.defaults(options)
-    Ninetyfive.options =
-        vim.deepcopy(vim.tbl_deep_extend("keep", options or {}, defaults or {}))
+    Ninetyfive.options = vim.deepcopy(vim.tbl_deep_extend("keep", options or {}, defaults or {}))
 
     -- let your user know that they provided a wrong value, this is reported when your plugin is executed.
     assert(
