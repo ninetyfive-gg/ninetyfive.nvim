@@ -105,7 +105,7 @@ local function request_completion(args)
     end
 
     -- Also clear any suggestions that were showing
-    suggestion.clear(args.buf)
+    suggestion.clear()
 end
 
 -- Function to set up autocommands related to websocket functionality
@@ -130,7 +130,12 @@ function Websocket.setup_autocommands()
         group = ninetyfive_augroup,
         callback = function(args)
             print("CursorMovedI")
-            request_completion(args)
+            if request_id == "" and Queue.length(completion_queue) == 0 then
+                request_completion(args)
+                return
+            end
+
+            -- TODO should we suggest here?
         end,
     })
 
@@ -140,7 +145,27 @@ function Websocket.setup_autocommands()
         callback = function(args)
             -- TODO here we should check if we need to send a delta
             print("TextChangedI")
-            request_completion(args)
+
+            -- Clear old ones
+            suggestion.clear()
+            
+            -- Check if there's an active completion?
+            print("request_id", request_id, "length", Queue.length(completion_queue))
+            if request_id == "" and Queue.length(completion_queue) == 0 then
+                request_completion(args)
+                return
+            end
+
+            -- Otherwise, use the existing one
+            local current_completion = Queue.pop(completion_queue)
+            if current_completion ~= nil then
+                local bufnr = vim.api.nvim_get_current_buf()
+                local cursor = vim.api.nvim_win_get_cursor(0)
+                local line = cursor[1] - 1
+                local col = cursor[2]
+
+                suggestion.show(bufnr, line, col, current_completion.completion)
+            end
         end,
     })
 
@@ -245,13 +270,6 @@ function Websocket.setup_connection(server_uri)
                                         print("presub completion is", completion)
                                         completion = string.sub(completion, 1, new_line_idx)
                                         print("completion is", completion)
-                                        -- We can show
-                                        local bufnr = vim.api.nvim_get_current_buf()
-                                        local cursor = vim.api.nvim_win_get_cursor(0)
-                                        local line = cursor[1] - 1
-                                        local col = cursor[2] - 1 -- Is this -1 correct
-
-                                        suggestion.show(bufnr, line, col, completion)
                                     end
                                 end
 
