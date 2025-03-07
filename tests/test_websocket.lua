@@ -1,5 +1,5 @@
 local websocket = require("ninetyfive.websocket")
-local Helpers = dofile("tests/helpers.lua")
+local eq = MiniTest.expect.equality
 
 -- Ensure the global table exists
 _G.Ninetyfive = _G.Ninetyfive or {}
@@ -20,7 +20,7 @@ describe("websocket", function()
     -- Don't connect: websocket.setup_connection("wss://echo.websocket.org")
     local result = websocket.send_message("1")
     
-    Helpers.expect.match_bool(result, false)
+    eq(result, false)
   end)
 
 end)
