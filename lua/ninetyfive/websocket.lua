@@ -3,6 +3,7 @@ local log = require("ninetyfive.util.log")
 local Websocket = {}
 
 -- Variable to store aggregated ghost text
+local completion_id = ""
 local completion = ""
 local request_id = ""
 local ninetyfive_ns = vim.api.nvim_create_namespace("ninetyfive_ghost_ns")
@@ -14,11 +15,59 @@ local function set_ghost_text(bufnr, line, col, message)
 
     -- Set the ghost text using an extmark
     -- https://neovim.io/doc/user/api.html#nvim_buf_set_extmark()
-    vim.api.nvim_buf_set_extmark(bufnr, ninetyfive_ns, line, col, {
+    completion_id = vim.api.nvim_buf_set_extmark(bufnr, ninetyfive_ns, line, col, {
         virt_text = { { message, "Comment" } }, -- "Comment" is the highlight group
         virt_text_pos = "overlay", -- Display the text at the end of the line
         hl_mode = "combine", -- Combine with existing highlights
     })
+end
+
+local function clear_suggestion(bufnr)
+    vim.api.nvim_buf_clear_namespace(bufnr, ninetyfive_ns, 0, -1)
+end
+
+local function accept_completion()
+    if not completion_id then return end
+  
+    local bufnr = vim.api.nvim_get_current_buf()
+    local extmark = vim.api.nvim_buf_get_extmark_by_id(bufnr, ninetyfive_ns, completion_id, {})
+  
+    if extmark and #extmark > 0 then
+      local line, col = extmark[1], extmark[2]
+  
+      -- Remove the suggestion
+      vim.api.nvim_buf_del_extmark(bufnr, ninetyfive_ns, completion_id)
+
+      -- Inserting the completion has to be done line by line
+      if string.find(completion, "\n") then
+        -- Split the ghost text by newlines
+        local lines = {}
+        for s in string.gmatch(completion, "[^\n]+") do
+          table.insert(lines, s)
+        end
+        
+        -- Insert the first line at the cursor position
+        if #lines > 0 then
+          vim.api.nvim_buf_set_text(bufnr, line, col, line, col, { lines[1] })
+        end
+        
+        -- Insert the rest of the lines as new lines
+        if #lines > 1 then
+          local new_lines = {}
+          for i = 2, #lines do
+            table.insert(new_lines, lines[i])
+          end
+          vim.api.nvim_buf_set_lines(bufnr, line + 1, line + 1, false, new_lines)
+        end
+      else
+        -- No newlines, just insert the text
+        vim.api.nvim_buf_set_text(bufnr, line, col, line, col, { completion })
+      end
+
+      completion_id = nil
+      completion = ""
+      request_id = ""
+    end
 end
 
 -- Function to send a message to the websocket
@@ -112,6 +161,9 @@ local function request_completion(args)
         print("err", tostring(err))
         log.debug("websocket", "Error in CursorMovedI callback: " .. tostring(err))
     end
+
+    -- Also clear any suggestions that were showing
+    clear_suggestion(args.buf)
 end
 
 -- Function to set up autocommands related to websocket functionality
@@ -120,6 +172,15 @@ function Websocket.setup_autocommands()
     -- https://www.youtube.com/watch?v=F6GNPOXpfwU
     local ninetyfive_augroup = vim.api.nvim_create_augroup("Ninetyfive", { clear = true })
 
+    -- Make accept_completion available globally
+    _G.accept_ninetyfive_completion = function()
+        accept_completion()
+        return ""  -- This is important for expr mappings to not insert anything
+    end
+    
+    -- Set up the Tab key mapping
+    vim.api.nvim_set_keymap("i", "<Tab>", "<Cmd>lua _G.accept_ninetyfive_completion()<CR>", { noremap = true, silent = true })
+    
     -- Autocommand for cursor movement in insert mode
     -- CursorMovedI does not seem to trigger when you type in insert mode!!
     vim.api.nvim_create_autocmd({ "CursorMovedI" }, {
@@ -226,16 +287,19 @@ function Websocket.setup_connection(server_uri)
                         else
                             if parsed.v and parsed.r == request_id then
                                 print("Received completion :o")
+                                print("completion", completion)
+                                if parsed.v == vim.NIL and completion ~= "" then
+                                    print("got nil, with completion ready")
+                                    -- Get current buffer and cursor position
+                                    local bufnr = vim.api.nvim_get_current_buf()
+                                    local cursor = vim.api.nvim_win_get_cursor(0)
+                                    local line = cursor[1] - 1 -- Lua uses 0-based indexing for lines
+                                    local col = cursor[2] -- Column is 0-based
+
+                                    set_ghost_text(bufnr, line, col, completion)
+                                end
                                 --TODO check `parsed.v == vim.NIL`
                                 completion = completion .. tostring(parsed.v)
-
-                                -- Get current buffer and cursor position
-                                local bufnr = vim.api.nvim_get_current_buf()
-                                local cursor = vim.api.nvim_win_get_cursor(0)
-                                local line = cursor[1] - 1 -- Lua uses 0-based indexing for lines
-                                local col = cursor[2] -- Column is 0-based
-
-                                set_ghost_text(bufnr, line, col, completion)
                             end
                         end
                     end
