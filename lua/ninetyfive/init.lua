@@ -179,52 +179,11 @@ local function set_ghost_text(bufnr, line, col)
     -- Path to the websocat binary (relative to the plugin directory)
     -- Get the plugin's root directory in a way that works regardless of where Neovim is opened
     local plugin_root = vim.fn.fnamemodify(vim.api.nvim_get_runtime_file("lua/ninetyfive/init.lua", false)[1] or "", ":h:h:h")
-    local websocat_path = plugin_root .. '/websocat.x86_64-unknown-linux-musl'
+    local websocat_path = plugin_root .. '/websocat.aarch64-apple-darwin'
     log.debug("websocket", "Using websocat at: " .. websocat_path)
     
     -- Make sure the binary is executable
     vim.fn.system('chmod +x ' .. vim.fn.shellescape(websocat_path))
-    
-    -- Create a buffer for websocket messages if it doesn't exist
-    if not _G.Ninetyfive.websocket_buffer or not vim.api.nvim_buf_is_valid(_G.Ninetyfive.websocket_buffer) then
-        local ok, buf = pcall(vim.api.nvim_create_buf, false, true)
-        if not ok then
-            log.notify("websocket", vim.log.levels.ERROR, true, "Failed to create websocket buffer: " .. tostring(buf))
-            return false
-        end
-        
-        _G.Ninetyfive.websocket_buffer = buf
-        
-        local ok2, err = pcall(vim.api.nvim_buf_set_name, buf, "NinetyfiveWebsocket")
-        if not ok2 then
-            log.debug("websocket", "Failed to set buffer name: " .. tostring(err))
-            -- Continue anyway, not critical
-        end
-    end
-    
-    -- Clear the buffer
-    vim.api.nvim_buf_set_lines(_G.Ninetyfive.websocket_buffer, 0, -1, false, {})
-    
-    -- Add header to the buffer
-    vim.api.nvim_buf_set_lines(_G.Ninetyfive.websocket_buffer, 0, -1, false, {
-        "Ninetyfive Websocket Connection",
-        "Connected to: ws://127.0.0.1:1234",
-        "-------------------------------------------",
-        ""
-    })
-    
-    -- Function to append messages to the buffer
-    local function append_to_buffer(message)
-        local lines = {}
-        for line in message:gmatch("[^\r\n]+") do
-            table.insert(lines, line)
-        end
-        
-        local line_count = vim.api.nvim_buf_line_count(_G.Ninetyfive.websocket_buffer)
-        vim.api.nvim_buf_set_lines(_G.Ninetyfive.websocket_buffer, line_count, line_count, false, lines)
-        
-        log.debug("websocket", message)
-    end
     
     -- Start the websocat process
     _G.Ninetyfive.websocket_job = vim.fn.jobstart({
@@ -235,8 +194,6 @@ local function set_ghost_text(bufnr, line, col)
             if data and #data > 0 then
                 local message = table.concat(data, "\n")
                 if message ~= "" then
-                    append_to_buffer("Received: " .. message)
-                    
                     -- Try to parse the message as JSON
                     local ok, parsed = pcall(vim.json.decode, message)
                     if ok and parsed then
@@ -280,12 +237,12 @@ local function set_ghost_text(bufnr, line, col)
             if data and #data > 0 then
                 local message = table.concat(data, "\n")
                 if message ~= "" then
-                    append_to_buffer("Error: " .. message)
+                    print("Error: " .. message)
                 end
             end
         end,
         on_exit = function(_, exit_code, _)
-            append_to_buffer("Websocket connection closed with exit code: " .. exit_code)
+            print("Websocket connection closed with exit code: " .. exit_code)
         end,
         stdout_buffered = false,
         stderr_buffered = false
@@ -298,20 +255,7 @@ local function set_ghost_text(bufnr, line, col)
     
     log.debug("websocket", "Started websocat process with job ID: " .. _G.Ninetyfive.websocket_job)
     
-    -- Add command to show the websocket buffer
-    vim.api.nvim_create_user_command("NinetyfiveWebsocket", function()
-        -- Check if buffer exists and is valid
-        if _G.Ninetyfive.websocket_buffer and vim.api.nvim_buf_is_valid(_G.Ninetyfive.websocket_buffer) then
-            -- Get current window
-            local win = vim.api.nvim_get_current_win()
-            -- Set the buffer in the current window
-            vim.api.nvim_win_set_buf(win, _G.Ninetyfive.websocket_buffer)
-        else
-            vim.notify("Websocket buffer not available", vim.log.levels.ERROR)
-        end
-    end, {})
-    
-    vim.notify("Ninetyfive websocket connection established. Use :NinetyfiveWebsocket to view messages.", vim.log.levels.INFO)
+    vim.notify("Ninetyfive websocket connection established.", vim.log.levels.INFO)
     return true
   end
 
