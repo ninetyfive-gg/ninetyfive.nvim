@@ -54,7 +54,6 @@ local function set_workspace()
     end
 
     if head ~= nil then
-        -- set workspace
         local set_workspace = vim.json.encode({
             type = "set-workspace",
             commitHash = head.hash,
@@ -62,7 +61,7 @@ local function set_workspace()
             name = repo .. "/" .. head.branch,
         })
 
-        print("workspace", set_workspace)
+        print("-> [set-workspace]", set_workspace)
 
         if not Websocket.send_message(set_workspace) then
             log.debug("websocket", "Failed to set-workspace")
@@ -71,6 +70,8 @@ local function set_workspace()
         local empty_workspace = vim.json.encode({
             type = "set-workspace",
         })
+
+        print("-> [set-workspace] empty")
 
         if not Websocket.send_message(empty_workspace) then
             log.debug("websocket", "Failed to empty set-workspace")
@@ -125,7 +126,8 @@ local function request_completion(args)
             pos = pos,
         })
 
-        print("delta-completion-request sent", request_id, repo, pos)
+        print("-> [delta-completion-request]", request_id, repo, pos)
+        
         if not Websocket.send_message(message) then
             log.debug("websocket", "Failed to send delta-completion-request message")
         end
@@ -134,7 +136,6 @@ local function request_completion(args)
     end)
 
     if not ok then
-        print("err", tostring(err))
         log.debug("websocket", "Error in CursorMovedI callback: " .. tostring(err))
     end
 
@@ -191,7 +192,6 @@ function Websocket.setup_autocommands()
             suggestion.clear()
 
             -- Check if there's an active completion?
-            print("request_id", request_id, "length", Queue.length(completion_queue))
             if request_id == "" and Queue.length(completion_queue) == 0 then
                 request_completion(args)
                 return
@@ -229,6 +229,8 @@ function Websocket.setup_autocommands()
                     path = bufname,
                     text = content,
                 })
+
+                print("-> [file-content]", bufname)
 
                 if not Websocket.send_message(message) then
                     log.debug("websocket", "Failed to send file-content message")
@@ -309,15 +311,15 @@ function Websocket.setup_connection(server_uri)
                     if ok and parsed then
                         if parsed.type then
                             if parsed.type == "subscription-info" then
-                                print("subscription-info", parsed)
+                                print("<- [subscription-info]", parsed)
                             elseif parsed.type == "get-commit" then
-                                print("get-commit")
+                                print("<- [get-commit]")
                             elseif parsed.type == "get-blob" then
-                                print("get-blob")
+                                print("<- [get-blob]")
                             end
                         else
                             if parsed.v and parsed.r == request_id then
-                                print("Received completion :o")
+                                print("<- [completion-response]")
                                 if parsed.v == vim.NIL then
                                     Queue.append(completion_queue, completion, true)
                                 else
@@ -335,7 +337,6 @@ function Websocket.setup_connection(server_uri)
                                         local line = completion:sub(1, new_line_idx - 1)
                                         Queue.append(completion_queue, line, false)
                                         completion = string.sub(completion, 1, new_line_idx)
-                                        print("got a line to show", completion)
                                     end
                                 end
 
@@ -354,12 +355,12 @@ function Websocket.setup_connection(server_uri)
             if data and #data > 0 then
                 local message = table.concat(data, "\n")
                 if message ~= "" then
-                    print("Error: " .. message)
+                    log.debug("websocket", "Failed to connect")
                 end
             end
         end,
         on_exit = function(_, exit_code, _)
-            print("Websocket connection closed with exit code: " .. exit_code)
+            log.debug("websocket", "Websocket connection closed with exit code: " .. exit_code)
         end,
         stdout_buffered = false,
         stderr_buffered = false,

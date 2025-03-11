@@ -13,7 +13,6 @@ suggestion.show = function(message)
     vim.api.nvim_buf_clear_namespace(bufnr, ninetyfive_ns, 0, -1)
 
     local virt_lines = {}
-    print("[suggestion.show] message:", message)
     for _, l in ipairs(vim.fn.split(message, "\n")) do
         table.insert(virt_lines, { { l, "Comment" } })
     end
@@ -52,8 +51,6 @@ suggestion.accept = function()
                 extmark_text = extmark_text .. part[1]
             end
         end
-
-        print("accepted completion", extmark_text)
 
         -- Add the rest of the lines from virt_lines
         if details.virt_lines then
