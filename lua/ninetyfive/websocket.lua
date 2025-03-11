@@ -44,6 +44,40 @@ function Websocket.send_message(message)
     return true
 end
 
+local function set_workspace()
+    local head = git.get_head()
+    local cwd = vim.fn.getcwd()
+    local repo = "unknown"
+    local repo_match = string.match(cwd, "/([^/]+)$")
+    if repo_match then
+        repo = repo_match
+    end
+
+    if head ~= nil then
+        -- set workspace
+        local set_workspace = vim.json.encode({
+            type = "set-workspace",
+            commitHash = head.hash,
+            path = cwd,
+            name = repo .. "/" .. head.branch,
+        })
+
+        print("workspace", set_workspace)
+
+        if not Websocket.send_message(set_workspace) then
+            log.debug("websocket", "Failed to set-workspace")
+        end
+    else
+        local empty_workspace = vim.json.encode({
+            type = "set-workspace",
+        })
+
+        if not Websocket.send_message(empty_workspace) then
+            log.debug("websocket", "Failed to empty set-workspace")
+        end
+    end
+end
+
 local function request_completion(args)
     local ok, err = pcall(function()
         -- Check that we're connected
@@ -183,37 +217,8 @@ function Websocket.setup_autocommands()
                     return
                 end
 
-                local head = git.get_head()
-                local cwd = vim.fn.getcwd()
-                local repo = "unknown"
-                local repo_match = string.match(cwd, "/([^/]+)$")
-                if repo_match then
-                    repo = repo_match
-                end
-
-                if head ~= nil then
-                    -- set workspace
-                    local set_workspace = vim.json.encode({
-                        type = "set-workspace",
-                        commitHash = head.hash,
-                        path = cwd,
-                        name = repo .. "/" .. head.branch,
-                    })
-
-                    print("workspace", set_workspace)
-
-                    if not Websocket.send_message(set_workspace) then
-                        log.debug("websocket", "Failed to set-workspace")
-                    end
-                else
-                    local empty_workspace = vim.json.encode({
-                        type = "set-workspace",
-                    })
-
-                    if not Websocket.send_message(empty_workspace) then
-                        log.debug("websocket", "Failed to empty set-workspace")
-                    end
-                end
+                -- TODO Is this the right way? This would be per buffer so may trigger more commit/blob requests?
+                set_workspace()
 
                 local bufnr = args.buf
                 local bufname = vim.api.nvim_buf_get_name(bufnr)
@@ -303,13 +308,12 @@ function Websocket.setup_connection(server_uri)
                     local ok, parsed = pcall(vim.json.decode, message)
                     if ok and parsed then
                         if parsed.type then
-                            if
-                                parsed.type == "get-commit"
-                                or parsed.type == "get-blob"
-                                or parsed.type == "subscription-info"
-                            then
-                                log.debug("websocket", "Received message of type: " .. parsed.type)
-                                print("Received message of type: " .. parsed.type)
+                            if parsed.type == "subscription-info" then
+                                print("subscription-info", parsed)
+                            elseif parsed.type == "get-commit" then
+                                print("get-commit")
+                            elseif parsed.type == "get-blob" then
+                                print("get-blob")
                             end
                         else
                             if parsed.v and parsed.r == request_id then
