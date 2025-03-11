@@ -183,6 +183,38 @@ function Websocket.setup_autocommands()
                     return
                 end
 
+                local head = git.get_head()
+                local cwd = vim.fn.getcwd()
+                local repo = "unknown"
+                local repo_match = string.match(cwd, "/([^/]+)$")
+                if repo_match then
+                    repo = repo_match
+                end
+
+                if head ~= nil then
+                    -- set workspace
+                    local set_workspace = vim.json.encode({
+                        type = "set-workspace",
+                        commitHash = head.hash,
+                        path = cwd,
+                        name = repo .. "/" .. head.branch,
+                    })
+
+                    print("workspace", set_workspace)
+
+                    if not Websocket.send_message(set_workspace) then
+                        log.debug("websocket", "Failed to set-workspace")
+                    end
+                else
+                    local empty_workspace = vim.json.encode({
+                        type = "set-workspace",
+                    })
+
+                    if not Websocket.send_message(empty_workspace) then
+                        log.debug("websocket", "Failed to empty set-workspace")
+                    end
+                end
+
                 local bufnr = args.buf
                 local bufname = vim.api.nvim_buf_get_name(bufnr)
                 local content = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
