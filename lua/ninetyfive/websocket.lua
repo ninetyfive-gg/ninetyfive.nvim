@@ -45,7 +45,7 @@ function Websocket.send_message(message)
 end
 
 local function set_workspace()
-    local head = git.get_head()
+    local head = git:get_head()
     local cwd = vim.fn.getcwd()
     local repo = "unknown"
     local repo_match = string.match(cwd, "/([^/]+)$")
@@ -127,7 +127,7 @@ local function request_completion(args)
         })
 
         print("-> [delta-completion-request]", request_id, repo, pos)
-        
+
         if not Websocket.send_message(message) then
             log.debug("websocket", "Failed to send delta-completion-request message")
         end
@@ -314,6 +314,19 @@ function Websocket.setup_connection(server_uri)
                                 print("<- [subscription-info]", parsed)
                             elseif parsed.type == "get-commit" then
                                 print("<- [get-commit]")
+                                local commit = git:get_commit(parsed.commitHash)
+
+                                local set_workspace = vim.json.encode({
+                                    type = "commit",
+                                    commitHash = parsed.commitHash,
+                                    commit = commit,
+                                })
+
+                                print("-> [commit]", set_workspace)
+
+                                if not Websocket.send_message(set_workspace) then
+                                    log.debug("websocket", "Failed to set-workspace")
+                                end
                             elseif parsed.type == "get-blob" then
                                 print("<- [get-blob]")
                             end
