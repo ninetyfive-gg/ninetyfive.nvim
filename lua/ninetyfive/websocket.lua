@@ -214,11 +214,11 @@ local function pick_binary()
     local binaries = {
         darwin = {
             x86_64 = "/websocat.x86_64-apple-darwin",
-            default = "/websocat.aarch64-apple-darwin"
+            default = "/websocat.aarch64-apple-darwin",
         },
         linux = "/websocat.x86_64-unknown-linux-musl",
         freebsd = "/websocat.x86_64-unknown-freebsd",
-        windows = "/websocat.x86_64-pc-windows-gnu.exe"
+        windows = "/websocat.x86_64-pc-windows-gnu.exe",
     }
 
     if binaries[sysname] then
