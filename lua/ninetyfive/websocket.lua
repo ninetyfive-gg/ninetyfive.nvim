@@ -204,6 +204,37 @@ function Websocket.setup_autocommands()
     })
 end
 
+-- See: https://github.com/neovim/neovim/blob/master/test/testutil.lua#L390
+local function pick_binary()
+    local uname = vim.uv.os_uname()
+    local sysname = uname.sysname:lower()
+    local arch = uname.machine
+
+    -- Missing some
+    local binaries = {
+        darwin = {
+            x86_64 = "/websocat.x86_64-apple-darwin",
+            default = "/websocat.aarch64-apple-darwin"
+        },
+        linux = "/websocat.x86_64-unknown-linux-musl",
+        freebsd = "/websocat.x86_64-unknown-freebsd",
+        windows = "/websocat.x86_64-pc-windows-gnu.exe"
+    }
+
+    if binaries[sysname] then
+        if type(binaries[sysname]) == "table" then
+            return binaries[sysname][arch] or binaries[sysname].default
+        end
+        return binaries[sysname]
+    end
+
+    if vim.fn.has("win32") == 1 or vim.fn.has("win64") == 1 then
+        return binaries.windows
+    end
+
+    return ""
+end
+
 -- Function to set up websocket connection
 function Websocket.setup_connection(server_uri)
     log.debug("websocket", "Setting up websocket connection")
@@ -221,10 +252,12 @@ function Websocket.setup_connection(server_uri)
         vim.api.nvim_get_runtime_file("lua/ninetyfive/init.lua", false)[1] or "",
         ":h:h:h"
     )
-    local websocat_path = plugin_root .. "/websocat.aarch64-apple-darwin"
+    local websocat_path = plugin_root .. pick_binary()
+    print(websocat_path)
     log.debug("websocket", "Using websocat at: " .. websocat_path)
 
-    -- Make sure the binary is executable
+    -- Make sure the binary is executable, this likely doesnt work everywhere, should we just commit them
+    -- on the right "mode"?
     vim.fn.system("chmod +x " .. vim.fn.shellescape(websocat_path))
 
     _G.Ninetyfive.websocket_job = vim.fn.jobstart({
