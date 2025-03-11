@@ -316,16 +316,16 @@ function Websocket.setup_connection(server_uri)
                                 print("<- [get-commit]")
                                 local commit = git:get_commit(parsed.commitHash)
 
-                                local set_workspace = vim.json.encode({
+                                local send_commit = vim.json.encode({
                                     type = "commit",
                                     commitHash = parsed.commitHash,
                                     commit = commit,
                                 })
 
-                                print("-> [commit]", set_workspace)
+                                print("-> [commit]", send_commit)
 
-                                if not Websocket.send_message(set_workspace) then
-                                    log.debug("websocket", "Failed to set-workspace")
+                                if not Websocket.send_message(send_commit) then
+                                    log.debug("websocket", "Failed to send commit")
                                 end
                             elseif parsed.type == "get-blob" then
                                 print("<- [get-blob]")
