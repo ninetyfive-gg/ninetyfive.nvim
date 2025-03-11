@@ -1,6 +1,7 @@
 local log = require("ninetyfive.util.log")
 local Queue = require("ninetyfive.queue")
 local suggestion = require("ninetyfive.suggestion")
+local git = require("ninetyfive.git")
 
 local Websocket = {}
 
@@ -253,7 +254,6 @@ function Websocket.setup_connection(server_uri)
         ":h:h:h"
     )
     local websocat_path = plugin_root .. pick_binary()
-    print(websocat_path)
     log.debug("websocket", "Using websocat at: " .. websocat_path)
 
     -- Make sure the binary is executable, this likely doesnt work everywhere, should we just commit them
@@ -262,7 +262,7 @@ function Websocket.setup_connection(server_uri)
 
     _G.Ninetyfive.websocket_job = vim.fn.jobstart({
         websocat_path,
-        "wss://api.ninetyfive.gg",
+        server_uri,
     }, {
         on_stdout = function(_, data, _)
             if data and #data > 0 then
