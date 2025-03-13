@@ -79,6 +79,24 @@ local function set_workspace()
     end
 end
 
+local function send_file_content(args)
+    local bufnr = args.buf
+    local bufname = vim.api.nvim_buf_get_name(bufnr)
+    local content = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
+
+    local message = vim.json.encode({
+        type = "file-content",
+        path = bufname,
+        text = content,
+    })
+
+    print("-> [file-content]", bufname)
+
+    if not Websocket.send_message(message) then
+        log.debug("websocket", "Failed to send file-content message")
+    end
+end
+
 local function request_completion(args)
     local ok, err = pcall(function()
         -- Check that we're connected
@@ -172,11 +190,11 @@ function Websocket.setup_autocommands()
         group = ninetyfive_augroup,
         callback = function(args)
             print("CursorMovedI")
-            if request_id == "" and Queue.length(completion_queue) == 0 then
-                request_completion(args)
-                return
-            end
 
+            -- Clear old ones
+            suggestion.clear()
+
+            request_completion(args)
             -- TODO should we suggest here?
         end,
     })
@@ -188,14 +206,13 @@ function Websocket.setup_autocommands()
             -- TODO here we should check if we need to send a delta
             print("TextChangedI")
 
+            send_file_content(args)
+
             -- Clear old ones
             suggestion.clear()
 
             -- Check if there's an active completion?
-            if request_id == "" and Queue.length(completion_queue) == 0 then
-                request_completion(args)
-                return
-            end
+            request_completion(args)
         end,
     })
 
@@ -220,21 +237,8 @@ function Websocket.setup_autocommands()
                 -- TODO Is this the right way? This would be per buffer so may trigger more commit/blob requests?
                 set_workspace()
 
-                local bufnr = args.buf
-                local bufname = vim.api.nvim_buf_get_name(bufnr)
-                local content = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
-
-                local message = vim.json.encode({
-                    type = "file-content",
-                    path = bufname,
-                    text = content,
-                })
-
-                print("-> [file-content]", bufname)
-
-                if not Websocket.send_message(message) then
-                    log.debug("websocket", "Failed to send file-content message")
-                end
+                -- TODO should this happen here
+                send_file_content(args)
             end)
 
             if not ok then
@@ -314,7 +318,7 @@ function Websocket.setup_connection(server_uri)
                                 print("<- [subscription-info]", parsed)
                             elseif parsed.type == "get-commit" then
                                 print("<- [get-commit]")
-                                local commit = git:get_commit(parsed.commitHash)
+                                local commit = git.get_commit(parsed.commitHash)
 
                                 local send_commit = vim.json.encode({
                                     type = "commit",
@@ -329,6 +333,25 @@ function Websocket.setup_connection(server_uri)
                                 end
                             elseif parsed.type == "get-blob" then
                                 print("<- [get-blob]")
+
+                                local blob = git.get_blob(parsed.commitHash, parsed.path)
+
+                                if blob ~= nil then
+                                    local send_blob = vim.json.encode({
+                                        type = "blob",
+                                        commitHash = parsed.commitHash,
+                                        objectHash = parsed.objectHash,
+                                        path = parsed.path,
+                                        blob = blob.blob,
+                                        diff = blob.diff,
+                                    })
+
+                                    print("-> [blob]", send_blob)
+
+                                    if not Websocket.send_message(send_blob) then
+                                        log.debug("websocket", "Failed to send blob")
+                                    end
+                                end
                             end
                         else
                             if parsed.v and parsed.r == request_id then
@@ -350,12 +373,15 @@ function Websocket.setup_connection(server_uri)
                                         local line = completion:sub(1, new_line_idx - 1)
                                         Queue.append(completion_queue, line, false)
                                         completion = string.sub(completion, 1, new_line_idx)
+                                        print("line", line)
+                                        print("comp", completion)
                                     end
                                 end
 
                                 -- We could have a suggestion here, try to show it
                                 local current_completion = Queue.pop(completion_queue)
                                 if current_completion ~= nil then
+                                    print("suggestion candidate", current_completion.completion)
                                     suggestion.show(current_completion.completion)
                                 end
                             end
