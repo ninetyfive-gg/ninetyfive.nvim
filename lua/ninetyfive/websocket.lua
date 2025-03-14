@@ -254,15 +254,19 @@ local function pick_binary()
     local sysname = uname.sysname:lower()
     local arch = uname.machine
 
-    -- Missing some
     local binaries = {
         darwin = {
-            x86_64 = "/websocat.x86_64-apple-darwin",
-            default = "/websocat.aarch64-apple-darwin",
+            x86_64 = "/dist/go-ws-proxy-darwin-arm64",
+            default = "/dist/go-ws-proxy-darwin-arm64",
         },
-        linux = "/websocat.x86_64-unknown-linux-musl",
-        freebsd = "/websocat.x86_64-unknown-freebsd",
-        windows = "/websocat.x86_64-pc-windows-gnu.exe",
+        linux = {
+            x86_64 = "/dist/go-ws-proxy-linux-arm64",
+            default = "/dist/go-ws-proxy-linux-arm64",
+        },
+        windows = {
+            x86_64 = "/dist/go-ws-proxy-windows-arm64",
+            default = "/dist/go-ws-proxy-windows-arm64",
+        },
     }
 
     if binaries[sysname] then
@@ -298,10 +302,6 @@ function Websocket.setup_connection(server_uri)
     )
     local websocat_path = plugin_root .. pick_binary()
     log.debug("websocket", "Using websocat at: " .. websocat_path)
-
-    -- Make sure the binary is executable, this likely doesnt work everywhere, should we just commit them
-    -- on the right "mode"?
-    vim.fn.system("chmod +x " .. vim.fn.shellescape(websocat_path))
 
     _G.Ninetyfive.websocket_job = vim.fn.jobstart({
         websocat_path,
