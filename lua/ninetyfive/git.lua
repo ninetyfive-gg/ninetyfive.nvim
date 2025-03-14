@@ -1,38 +1,4 @@
 local git = {}
-local bit = require("bit")
-local b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
-
-local function to_base64(data)
-    local result = {}
-    local len = #data
-    local padding = (3 - (len % 3)) % 3 -- Calculate padding needed (0, 1, or 2)
-
-    for i = 1, len, 3 do
-        local a, b, c = data:byte(i, i + 2)
-        local n = bit.bor(bit.lshift(a or 0, 16), bit.lshift(b or 0, 8), (c or 0))
-
-        result[#result + 1] = b64chars:sub(bit.rshift(n, 18) % 64 + 1, bit.rshift(n, 18) % 64 + 1)
-        result[#result + 1] = b64chars:sub(bit.rshift(n, 12) % 64 + 1, bit.rshift(n, 12) % 64 + 1)
-        result[#result + 1] = (
-            b and b64chars:sub(bit.rshift(n, 6) % 64 + 1, bit.rshift(n, 6) % 64 + 1) or "="
-        )
-        result[#result + 1] = (c and b64chars:sub(n % 64 + 1, n % 64 + 1) or "=")
-    end
-
-    if padding > 0 then
-        for _ = 1, padding do
-            result[#result] = "="
-        end
-    end
-
-    return table.concat(result)
-end
-
-local function compress_and_encode(data)
-    local compressed = vim.fn.system(string.format("echo -n \"%s\" | gzip | base64", data))
-    print("compressed", compressed)
-    return compressed
-end
 
 local function run_git_command(cmd)
     local handle = io.popen(cmd)
@@ -45,7 +11,6 @@ local function run_git_command(cmd)
 end
 
 -- "Public" api
-
 git.is_available = function()
     return vim.fn.executable("git") == 1
 end
@@ -174,8 +139,8 @@ function git.get_blob(hash, file)
     end
 
     -- Compress and encode blob and diff
-    local encoded_blob = compress_and_encode(blob)
-    local encoded_diff = compress_and_encode(diff)
+    local encoded_blob = vim.base64.encode(blob)
+    local encoded_diff = vim.base64.encode(diff)
 
     return {
         blob = encoded_blob,
