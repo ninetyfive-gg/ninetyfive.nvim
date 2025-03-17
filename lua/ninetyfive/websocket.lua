@@ -294,17 +294,17 @@ function Websocket.setup_connection(server_uri)
         _G.Ninetyfive.websocket_job = nil
     end
 
-    -- Path to the websocat binary (relative to the plugin directory)
+    -- Path to the binary (relative to the plugin directory)
     -- Get the plugin's root directory in a way that works regardless of where Neovim is opened
     local plugin_root = vim.fn.fnamemodify(
         vim.api.nvim_get_runtime_file("lua/ninetyfive/init.lua", false)[1] or "",
         ":h:h:h"
     )
-    local websocat_path = plugin_root .. pick_binary()
-    log.debug("websocket", "Using websocat at: " .. websocat_path)
+    local binary_path = plugin_root .. pick_binary()
+    log.debug("websocket", "Using binary at: " .. binary_path)
 
     _G.Ninetyfive.websocket_job = vim.fn.jobstart({
-        websocat_path,
+        binary_path,
         server_uri,
     }, {
         on_stdout = function(_, data, _)
@@ -406,11 +406,11 @@ function Websocket.setup_connection(server_uri)
     })
 
     if _G.Ninetyfive.websocket_job <= 0 then
-        log.notify("websocket", vim.log.levels.ERROR, true, "Failed to start websocat process")
+        log.notify("websocket", vim.log.levels.ERROR, true, "Failed to start process")
         return false
     end
 
-    log.debug("websocket", "Started websocat process with job ID: " .. _G.Ninetyfive.websocket_job)
+    log.debug("websocket", "Started process with job ID: " .. _G.Ninetyfive.websocket_job)
 
     vim.notify("Ninetyfive websocket connection established.", vim.log.levels.INFO)
     return true
