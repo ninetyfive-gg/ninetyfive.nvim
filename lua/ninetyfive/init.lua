@@ -21,7 +21,7 @@ function Ninetyfive.toggle()
     if was_disabled and state:get_enabled() then
         log.debug("toggle", "Setting up autocommands and websocket after toggle")
         websocket.setup_autocommands()
-        websocket.setup_connection("ws://100.118.7.128:8000?user_id=123")
+        websocket.setup_connection("wss://api.ninetyfive.gg?user_id=12345")
     end
 end
 
@@ -35,7 +35,7 @@ function Ninetyfive.enable(scope)
     websocket.setup_autocommands()
 
     -- Set up websocket connection
-    websocket.setup_connection("ws://100.118.7.128:8000?user_id=123")
+    websocket.setup_connection("wss://api.ninetyfive.gg?user_id=12345")
 
     main.toggle(scope or "public_api_enable")
 end
