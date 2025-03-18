@@ -52,9 +52,17 @@ end
 
 --- sets Ninetyfive with the provided API Key
 ---
----@param apiKey: the api key you want to use.
-function Ninetyfive.setApiKey(apiKey)
+---@param api_key: the api key you want to use.
+function Ninetyfive.setApiKey(api_key)
     log.debug("init.lua", "Set api key called!!!!")
+end
+
+function Ninetyfive.accept()
+    websocket.accept()
+end
+
+function Ninetyfive.reject()
+    websocket.reject()
 end
 
 _G.Ninetyfive = Ninetyfive

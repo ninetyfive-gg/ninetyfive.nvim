@@ -10,6 +10,20 @@ local Ninetyfive = {}
 Ninetyfive.options = {
     -- Prints useful logs about what event are triggered, and reasons actions are executed.
     debug = false,
+    -- TODO Autoenable
+    autocmds = {
+        -- If `true`, enables Ninetyfive plugin when you start NeoVim
+        enableOnVimEnter = false,
+    },
+    -- TODO Keybinds
+    mappings = {
+        -- When `true`, creates all the mappings set
+        enabled = true,
+        -- Sets a global mapping to accept a suggestion
+        accept = "<C-f>",
+        -- Sets a global mapping to reject a suggestion
+        reject = "<C-w>",
+    },
 }
 
 ---@private
@@ -32,6 +46,31 @@ function Ninetyfive.defaults(options)
     return Ninetyfive.options
 end
 
+--- Registers the plugin mappings if the option is enabled.
+---
+---@param options table The mappins provided by the user.
+---@param mappings table A key value map of the mapping name and its command.
+---
+---@private
+local function register_mappings(options, mappings)
+    -- all of the mappings are disabled
+    if not options.enabled then
+        return
+    end
+
+    for name, command in pairs(mappings) do
+        -- this specific mapping is disabled
+        if not options[name] then
+            return
+        end
+
+        assert(type(options[name]) == "string", string.format("`%s` must be a string", name))
+        -- We set the keymap for insert mode!
+        -- Since we expose the :Ninetyfive<> commands, an user could still accept when not in insert mode?
+        vim.api.nvim_set_keymap("i", options[name], command, { noremap = true, silent = true })
+    end
+end
+
 --- Define your ninetyfive setup.
 ---
 ---@param options table Module config table. See |Ninetyfive.options|.
@@ -41,6 +80,11 @@ function Ninetyfive.setup(options)
     Ninetyfive.options = Ninetyfive.defaults(options or {})
 
     log.warn_deprecation(Ninetyfive.options)
+
+    register_mappings(Ninetyfive.options.mappings, {
+        accept = "<Esc>:NinetyfiveAccept<CR>",
+        reject = "<Esc>:NinetyfiveReject<CR>",
+    })
 
     return Ninetyfive.options
 end

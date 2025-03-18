@@ -161,27 +161,22 @@ local function request_completion(args)
     suggestion.clear()
 end
 
+function Websocket.accept()
+    suggestion.accept()
+    completion = ""
+    request_id = ""
+end
+
+function Websocket.reject()
+    -- TODO anything to send to the server?
+    suggestion.clear()
+end
+
 -- Function to set up autocommands related to websocket functionality
 function Websocket.setup_autocommands()
     -- Create an autogroup for Ninetyfive
     -- https://www.youtube.com/watch?v=F6GNPOXpfwU
     local ninetyfive_augroup = vim.api.nvim_create_augroup("Ninetyfive", { clear = true })
-
-    -- Make accept_completion available globally
-    _G.accept_ninetyfive_completion = function()
-        suggestion.accept()
-        completion = ""
-        request_id = ""
-        return "" -- This is important for expr mappings to not insert anything
-    end
-
-    -- Set up the Tab key mapping
-    vim.api.nvim_set_keymap(
-        "i",
-        "<Tab>",
-        "<Cmd>lua _G.accept_ninetyfive_completion()<CR>",
-        { noremap = true, silent = true }
-    )
 
     -- Autocommand for cursor movement in insert mode
     -- CursorMovedI does not seem to trigger when you type in insert mode!!
@@ -373,15 +368,12 @@ function Websocket.setup_connection(server_uri)
                                         local line = completion:sub(1, new_line_idx - 1)
                                         Queue.append(completion_queue, line, false)
                                         completion = string.sub(completion, 1, new_line_idx)
-                                        print("line", line)
-                                        print("comp", completion)
                                     end
                                 end
 
                                 -- We could have a suggestion here, try to show it
                                 local current_completion = Queue.pop(completion_queue)
                                 if current_completion ~= nil then
-                                    print("suggestion candidate", current_completion.completion)
                                     suggestion.show(current_completion.completion)
                                 end
                             end
