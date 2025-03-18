@@ -1,5 +1,6 @@
 Ninetyfive.disable()	ninetyfive.txt	/*Ninetyfive.disable()*
 Ninetyfive.enable()	ninetyfive.txt	/*Ninetyfive.enable()*
 Ninetyfive.options	ninetyfive.txt	/*Ninetyfive.options*
+Ninetyfive.setApiKey()	ninetyfive.txt	/*Ninetyfive.setApiKey()*
 Ninetyfive.setup()	ninetyfive.txt	/*Ninetyfive.setup()*
 Ninetyfive.toggle()	ninetyfive.txt	/*Ninetyfive.toggle()*

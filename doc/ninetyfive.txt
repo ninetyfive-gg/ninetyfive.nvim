@@ -14,6 +14,14 @@ Initializes the plugin, sets event listeners and internal state.
                              `Ninetyfive.disable`()
 Disables the plugin, clear highlight groups and autocmds, closes side buffers and resets the internal state.
 
+------------------------------------------------------------------------------
+                                                        *Ninetyfive.setApiKey()*
+                       `Ninetyfive.setApiKey`({api_key})
+sets Ninetyfive with the provided API Key
+
+Parameters ~
+{api_key:} `(the)` api key you want to use.
+
 
 ==============================================================================
 ------------------------------------------------------------------------------
@@ -28,6 +36,20 @@ Default values:
   Ninetyfive.options = {
       -- Prints useful logs about what event are triggered, and reasons actions are executed.
       debug = false,
+      -- TODO Autoenable
+      autocmds = {
+          -- If `true`, enables Ninetyfive plugin when you start NeoVim
+          enableOnVimEnter = false,
+      },
+      -- TODO Keybinds
+      mappings = {
+          -- When `true`, creates all the mappings set
+          enabled = true,
+          -- Sets a global mapping to accept a suggestion
+          accept = "<C-f>",
+          -- Sets a global mapping to reject a suggestion
+          reject = "<C-w>",
+      },
   }
 
 <
