@@ -10,12 +10,8 @@ local Ninetyfive = {}
 Ninetyfive.options = {
     -- Prints useful logs about what event are triggered, and reasons actions are executed.
     debug = false,
-    -- TODO Autoenable
-    autocmds = {
-        -- If `true`, enables Ninetyfive plugin when you start NeoVim
-        enableOnVimEnter = false,
-    },
-    -- TODO Keybinds
+    -- When `true`, enables the plugin on NeoVim startup
+    enable_on_startup = false,
     mappings = {
         -- When `true`, creates all the mappings set
         enabled = true,

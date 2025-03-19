@@ -48,6 +48,14 @@ end
 -- setup Ninetyfive options and merge them with user provided ones.
 function Ninetyfive.setup(opts)
     _G.Ninetyfive.config = config.setup(opts)
+
+    if _G.Ninetyfive.config.enable_on_startup then
+        -- Set up autocommands when plugin is enabled
+        websocket.setup_autocommands()
+
+        -- Set up websocket connection
+        websocket.setup_connection("wss://api.ninetyfive.gg?user_id=12345")
+    end
 end
 
 --- sets Ninetyfive with the provided API Key
