@@ -61,7 +61,7 @@ local function set_workspace()
             name = repo .. "/" .. head.branch,
         })
 
-        print("-> [set-workspace]", set_workspace)
+        log.debug("[messages]", "-> [set-workspace]", set_workspace)
 
         if not Websocket.send_message(set_workspace) then
             log.debug("websocket", "Failed to set-workspace")
@@ -71,7 +71,7 @@ local function set_workspace()
             type = "set-workspace",
         })
 
-        print("-> [set-workspace] empty")
+        log.debug("[messages]", "-> [set-workspace] empty")
 
         if not Websocket.send_message(empty_workspace) then
             log.debug("websocket", "Failed to empty set-workspace")
@@ -90,7 +90,7 @@ local function send_file_content(args)
         text = content,
     })
 
-    print("-> [file-content]", bufname)
+    log.debug("[messages]", "-> [file-content]", bufname)
 
     if not Websocket.send_message(message) then
         log.debug("websocket", "Failed to send file-content message")
@@ -144,7 +144,7 @@ local function request_completion(args)
             pos = pos,
         })
 
-        print("-> [delta-completion-request]", request_id, repo, pos)
+        log.debug("[messages]", "-> [delta-completion-request]", request_id, repo, pos)
 
         if not Websocket.send_message(message) then
             log.debug("websocket", "Failed to send delta-completion-request message")
@@ -184,7 +184,7 @@ function Websocket.setup_autocommands()
         pattern = "*",
         group = ninetyfive_augroup,
         callback = function(args)
-            print("CursorMovedI")
+            log.debug("[autocmd]", "CursorMovedI")
 
             -- Clear old ones
             suggestion.clear()
@@ -199,7 +199,7 @@ function Websocket.setup_autocommands()
         group = ninetyfive_augroup,
         callback = function(args)
             -- TODO here we should check if we need to send a delta
-            print("TextChangedI")
+            log.debug("[autocmd]", "TextChangedI")
 
             send_file_content(args)
 
@@ -310,9 +310,9 @@ function Websocket.setup_connection(server_uri)
                     if ok and parsed then
                         if parsed.type then
                             if parsed.type == "subscription-info" then
-                                print("<- [subscription-info]", parsed)
+                                log.debug("[messages]", "<- [subscription-info]", parsed)
                             elseif parsed.type == "get-commit" then
-                                print("<- [get-commit]")
+                                log.debug("[messages]", "<- [get-commit]")
                                 local commit = git.get_commit(parsed.commitHash)
 
                                 local send_commit = vim.json.encode({
@@ -321,13 +321,13 @@ function Websocket.setup_connection(server_uri)
                                     commit = commit,
                                 })
 
-                                print("-> [commit]", send_commit)
+                                log.debug("[messages]", "-> [commit]", send_commit)
 
                                 if not Websocket.send_message(send_commit) then
                                     log.debug("websocket", "Failed to send commit")
                                 end
                             elseif parsed.type == "get-blob" then
-                                print("<- [get-blob]")
+                                log.debug("[messages]", "<- [get-blob]")
 
                                 local blob = git.get_blob(parsed.commitHash, parsed.path)
 
@@ -341,7 +341,7 @@ function Websocket.setup_connection(server_uri)
                                         diff = blob.diff,
                                     })
 
-                                    print("-> [blob]", send_blob)
+                                    log.debug("[messages]", "-> [blob]", send_blob)
 
                                     if not Websocket.send_message(send_blob) then
                                         log.debug("websocket", "Failed to send blob")
@@ -350,7 +350,8 @@ function Websocket.setup_connection(server_uri)
                             end
                         else
                             if parsed.v and parsed.r == request_id then
-                                print("<- [completion-response]")
+                                log.debug("[messages]", "<- [completion-response]")
+
                                 if parsed.v == vim.NIL then
                                     Queue.append(completion_queue, completion, true)
                                 else
