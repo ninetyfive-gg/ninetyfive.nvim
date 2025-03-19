@@ -40,7 +40,7 @@ function Websocket.send_message(message)
         return false
     end
 
-    log.debug("websocket", "Sent message to websocket: " .. message)
+    log.debug("websocket", "Sent message to websocket")
     return true
 end
 
@@ -245,21 +245,22 @@ end
 
 -- See: https://github.com/neovim/neovim/blob/master/test/testutil.lua#L390
 local function pick_binary()
-    local uname = vim.uv.os_uname()
+    local uv = vim.uv or vim.loop -- `vim.uv` is only available after 0.10
+    local uname = uv.os_uname()
     local sysname = uname.sysname:lower()
     local arch = uname.machine
 
     local binaries = {
         darwin = {
-            x86_64 = "/dist/go-ws-proxy-darwin-arm64",
+            x86_64 = "/dist/go-ws-proxy-darwin-amd64",
             default = "/dist/go-ws-proxy-darwin-arm64",
         },
         linux = {
-            x86_64 = "/dist/go-ws-proxy-linux-arm64",
+            x86_64 = "/dist/go-ws-proxy-linux-amd64",
             default = "/dist/go-ws-proxy-linux-arm64",
         },
         windows = {
-            x86_64 = "/dist/go-ws-proxy-windows-arm64",
+            x86_64 = "/dist/go-ws-proxy-windows-amd64",
             default = "/dist/go-ws-proxy-windows-arm64",
         },
     }
