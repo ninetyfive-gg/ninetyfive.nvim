@@ -23,7 +23,7 @@ suggestion.show = function(message)
     completion_id = vim.api.nvim_buf_set_extmark(bufnr, ninetyfive_ns, line, col, {
         right_gravity = true,
         virt_text = first_line,
-        virt_text_pos = "inline",
+        virt_text_pos = vim.fn.has "nvim-0.10" == 1 and "inline" or "overlay",
         virt_lines = virt_lines,
         hl_mode = "combine",
         ephemeral = false,
