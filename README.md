@@ -70,6 +70,20 @@ require("lazy").setup({"ninetyfive.nvim"})
 </table>
 </div>
 
+## Set up
+You can tweak key mappings using `init.vim`.
+```vim
+filetype plugin on
+
+lua << EOF
+require("ninetyfive").setup({
+  enable = true,
+  accept = "<C-e>",
+  reject = "<C-w>",
+})
+EOF
+```
+
 ## Commands
 
 | Command       | Description         |
