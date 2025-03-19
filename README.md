@@ -79,7 +79,7 @@ lua << EOF
 require("ninetyfive").setup({
   enable_on_startup = true,
   mappings = {
-    accept = "<C-e>",
+    accept = "<C-f>",
     reject = "<C-w>",
   }
 })
