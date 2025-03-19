@@ -77,9 +77,11 @@ filetype plugin on
 
 lua << EOF
 require("ninetyfive").setup({
-  enable = true,
-  accept = "<C-e>",
-  reject = "<C-w>",
+  enable_on_startup = true,
+  mappings = {
+    accept = "<C-e>",
+    reject = "<C-w>",
+  }
 })
 EOF
 ```
