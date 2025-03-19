@@ -52,7 +52,7 @@ end
 
 --- sets Ninetyfive with the provided API Key
 ---
----@param api_key: the api key you want to use.
+---@param api_key string: the api key you want to use.
 function Ninetyfive.setApiKey(api_key)
     log.debug("init.lua", "Set api key called!!!!")
 end
