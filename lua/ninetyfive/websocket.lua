@@ -58,7 +58,7 @@ local function set_workspace()
         repo = repo_match
     end
 
-    if head ~= nil then
+    if head ~= nil and head.hash ~= ""  then
         local set_workspace = vim.json.encode({
             type = "set-workspace",
             commitHash = head.hash,
