@@ -59,9 +59,9 @@ Plug "ninetyfive.nvim"
 
 ```lua
 -- stable version
-require("lazy").setup({{"ninetyfive.nvim", version = "*"}})
+require("lazy").setup({{"ninetyfive-gg/ninetyfive.nvim", version = "*"}})
 -- dev version
-require("lazy").setup({"ninetyfive.nvim"})
+require("lazy").setup({"ninetyfive-gg/ninetyfive.nvim"})
 ```
 
 </td>
