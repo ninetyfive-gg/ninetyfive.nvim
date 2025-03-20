@@ -169,4 +169,16 @@ function git.get_blob(hash, file)
     }
 end
 
+function git.is_ignored(file_path)
+    if not file_path or file_path == "" then
+        return true
+    end
+
+    local cmd = string.format("git check-ignore %s", file_path)
+    local result = run_git_command(cmd)
+
+    -- An empty result means the file is not ignored
+    return result ~= ""
+end
+
 return git

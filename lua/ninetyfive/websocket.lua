@@ -92,6 +92,11 @@ local function send_file_content(args)
     local bufname = vim.api.nvim_buf_get_name(bufnr)
     local content = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
 
+    if git.is_ignored(bufname) then
+        log.debug("websocket", "skipping file-content message - file is git ignored")
+        return
+    end
+
     local message = vim.json.encode({
         type = "file-content",
         path = bufname,
@@ -116,6 +121,12 @@ local function request_completion(args)
         end
 
         local bufnr = args.buf
+        local bufname = vim.api.nvim_buf_get_name(bufnr)
+
+        if git.is_ignored(bufname) then
+            log.debug("websocket", "Skipping delta-completion-request - file is git ignored")
+            return
+        end
         local cursor = vim.api.nvim_win_get_cursor(0)
         local line = cursor[1] - 1 -- Lua uses 0-based indexing for lines
         local col = cursor[2] -- Column is 0-based
