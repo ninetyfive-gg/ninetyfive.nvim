@@ -210,7 +210,7 @@ function Websocket.setup_autocommands()
         pattern = "*",
         group = ninetyfive_augroup,
         callback = function(args)
-            log.debug("[autocmd]", "CursorMovedI")
+            log.debug("autocmd", "CursorMovedI")
 
             -- Clear old ones
             suggestion.clear()
@@ -225,7 +225,7 @@ function Websocket.setup_autocommands()
         group = ninetyfive_augroup,
         callback = function(args)
             -- TODO here we should check if we need to send a delta
-            log.debug("[autocmd]", "TextChangedI")
+            log.debug("autocmd", "TextChangedI")
 
             send_file_content(args)
 
