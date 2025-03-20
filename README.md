@@ -71,16 +71,19 @@ require("lazy").setup({"ninetyfive-gg/ninetyfive.nvim"})
 </div>
 
 ## Set up
-You can tweak key mappings using `init.vim`.
+
+You can tweak key mappings using `~/.config/nvim/init.vim` or `~/.vimrc` like this:
+
 ```vim
 filetype plugin on
 
 lua << EOF
 require("ninetyfive").setup({
-  enable_on_startup = true,
+  enable_on_startup = true, -- Enable plugin on startup
   mappings = {
-    accept = "<C-f>",
-    reject = "<C-w>",
+    enable = true,    -- Enable default keybindings
+    accept = "<C-f>", -- Change default keybindings
+    reject = "<C-w>", -- Change default keybindings
   }
 })
 EOF
