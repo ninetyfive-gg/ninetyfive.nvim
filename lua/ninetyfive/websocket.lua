@@ -176,6 +176,18 @@ end
 function Websocket.accept()
     if completion ~= "" and buffer == vim.api.nvim_get_current_buf() then
         suggestion.accept()
+
+        local message = vim.json.encode({
+            type = "accept-completion",
+            completion = request_id,
+        })
+
+        log.debug("messages", "-> [accept-completion]", request_id)
+
+        if not Websocket.send_message(message) then
+            log.debug("websocket", "Failed to send accept-completion message")
+        end
+
         completion = ""
         request_id = ""
     end
