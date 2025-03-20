@@ -51,14 +51,16 @@ end
 
 local function set_workspace()
     local head = git:get_head()
-    local cwd = vim.fn.getcwd()
+    local cwd = git:get_repo_root()
     local repo = "unknown"
-    local repo_match = string.match(cwd, "/([^/]+)$")
-    if repo_match then
-        repo = repo_match
+    if cwd then
+        local repo_match = string.match(cwd, "/([^/]+)$")
+        if repo_match then
+            repo = repo_match
+        end
     end
 
-    if head ~= nil and head.hash ~= ""  then
+    if head ~= nil and head.hash ~= "" then
         local set_workspace = vim.json.encode({
             type = "set-workspace",
             commitHash = head.hash,
@@ -129,11 +131,13 @@ local function request_completion(args)
         local pos = #content_to_cursor
 
         -- Repo is the cwd? Is this generally correct with how people use neovim?
-        local cwd = vim.fn.getcwd()
+        local cwd = git:get_repo_root()
         local repo = "unknown"
-        local repo_match = string.match(cwd, "/([^/]+)$")
-        if repo_match then
-            repo = repo_match
+        if cwd then
+            local repo_match = string.match(cwd, "/([^/]+)$")
+            if repo_match then
+                repo = repo_match
+            end
         end
 
         -- Generate a request ID
@@ -399,19 +403,33 @@ function Websocket.setup_connection(server_uri)
         end,
         on_exit = function(_, exit_code, _)
             log.debug("websocket", "Websocket connection closed with exit code: " .. exit_code)
-            
+
             -- Attempt to reconnect if not shutting down intentionally
             if reconnect_attempts < max_reconnect_attempts then
                 reconnect_attempts = reconnect_attempts + 1
-                
-                log.debug("websocket", "Attempting to reconnect in " .. reconnect_delay .. "ms (attempt " .. reconnect_attempts .. "/" .. max_reconnect_attempts .. ")")
-                
+
+                log.debug(
+                    "websocket",
+                    "Attempting to reconnect in "
+                        .. reconnect_delay
+                        .. "ms (attempt "
+                        .. reconnect_attempts
+                        .. "/"
+                        .. max_reconnect_attempts
+                        .. ")"
+                )
+
                 vim.defer_fn(function()
                     log.debug("websocket", "Reconnecting to websocket...")
                     Websocket.setup_connection(server_uri)
                 end, reconnect_delay)
             else
-                log.notify("websocket", vim.log.levels.WARN, true, "Failed to reconnect after " .. max_reconnect_attempts .. " attempts")
+                log.notify(
+                    "websocket",
+                    vim.log.levels.WARN,
+                    true,
+                    "Failed to reconnect after " .. max_reconnect_attempts .. " attempts"
+                )
                 reconnect_attempts = 0
             end
         end,

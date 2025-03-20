@@ -1,18 +1,40 @@
 local git = {}
 
+-- Finds the root git repository for the current buffer, considering the use can have a cwd that
+-- is not a git repository.
+git.get_repo_root = function()
+    local buffer_dir = vim.fn.expand("%:p:h")
+    local handle =
+        io.popen(string.format("cd %s && git rev-parse --show-toplevel 2> /dev/null", buffer_dir))
+    if not handle then
+        return nil
+    end
+    local result = handle:read("*a")
+    handle:close()
+    result = result:gsub("\n$", "")
+    print("git", result)
+    return result ~= "" and result or nil
+end
+
 local function run_git_command(cmd)
-    local handle = io.popen(cmd)
+    local repo_root = git.get_repo_root()
+    local full_cmd
+
+    if repo_root then
+        -- Execute git command in the repository root
+        full_cmd = string.format("cd %s && %s", repo_root, cmd)
+    else
+        -- Fallback to current directory if not in a git repository
+        full_cmd = cmd
+    end
+
+    local handle = io.popen(full_cmd)
     if not handle then
         return nil, "Failed"
     end
     local result = handle:read("*a")
     handle:close()
     return result:gsub("\n$", "")
-end
-
--- "Public" api
-git.is_available = function()
-    return vim.fn.executable("git") == 1
 end
 
 git.get_head = function()
