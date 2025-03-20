@@ -5,6 +5,11 @@ local git = require("ninetyfive.git")
 
 local Websocket = {}
 
+-- Reconnection settings
+local reconnect_attempts = 0
+local max_reconnect_attempts = 300
+local reconnect_delay = 1000
+
 -- Variable to store aggregated ghost text
 local completion = ""
 local request_id = ""
@@ -394,6 +399,21 @@ function Websocket.setup_connection(server_uri)
         end,
         on_exit = function(_, exit_code, _)
             log.debug("websocket", "Websocket connection closed with exit code: " .. exit_code)
+            
+            -- Attempt to reconnect if not shutting down intentionally
+            if reconnect_attempts < max_reconnect_attempts then
+                reconnect_attempts = reconnect_attempts + 1
+                
+                log.debug("websocket", "Attempting to reconnect in " .. reconnect_delay .. "ms (attempt " .. reconnect_attempts .. "/" .. max_reconnect_attempts .. ")")
+                
+                vim.defer_fn(function()
+                    log.debug("websocket", "Reconnecting to websocket...")
+                    Websocket.setup_connection(server_uri)
+                end, reconnect_delay)
+            else
+                log.notify("websocket", vim.log.levels.WARN, true, "Failed to reconnect after " .. max_reconnect_attempts .. " attempts")
+                reconnect_attempts = 0
+            end
         end,
         stdout_buffered = false,
         stderr_buffered = false,
