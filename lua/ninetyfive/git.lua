@@ -12,7 +12,6 @@ git.get_repo_root = function()
     local result = handle:read("*a")
     handle:close()
     result = result:gsub("\n$", "")
-    print("git", result)
     return result ~= "" and result or nil
 end
 
