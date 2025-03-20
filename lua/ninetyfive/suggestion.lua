@@ -66,6 +66,8 @@ suggestion.accept = function()
         vim.api.nvim_buf_del_extmark(bufnr, ninetyfive_ns, completion_id)
 
         -- Inserting the completion has to be done line by line
+        local new_line, new_col = line, col
+        
         if string.find(extmark_text, "\n") then
             -- Split the ghost text by newlines
             local lines = {}
@@ -76,6 +78,7 @@ suggestion.accept = function()
             -- Insert the first line at the cursor position
             if #lines > 0 then
                 vim.api.nvim_buf_set_text(bufnr, line, col, line, col, { lines[1] })
+                new_col = col + #lines[1]
             end
 
             -- Insert the rest of the lines as new lines
@@ -85,12 +88,21 @@ suggestion.accept = function()
                     table.insert(new_lines, lines[i])
                 end
                 vim.api.nvim_buf_set_lines(bufnr, line + 1, line + 1, false, new_lines)
+                new_line = line + #lines - 1
+                new_col = #lines[#lines]
             end
         else
             -- No newlines, just insert the text
             vim.api.nvim_buf_set_text(bufnr, line, col, line, col, { extmark_text })
+            new_col = col + #extmark_text
         end
 
+        -- Move cursor to the end of inserted text
+        vim.api.nvim_win_set_cursor(0, {new_line + 1, new_col})
+        
+        -- Switch back to insert mode
+        vim.cmd("startinsert!")
+        
         completion_id = ""
     end
 end
