@@ -12,6 +12,7 @@ local reconnect_delay = 1000
 
 -- Variable to store aggregated ghost text
 local completion = ""
+local buffer = nil
 local request_id = ""
 local completion_queue = Queue.New()
 
@@ -146,6 +147,8 @@ local function request_completion(args)
         -- Clear the aggregated ghost text when sending a new completion request
         completion = ""
 
+        buffer = bufnr
+
         local message = vim.json.encode({
             type = "delta-completion-request",
             requestId = request_id,
@@ -171,9 +174,11 @@ local function request_completion(args)
 end
 
 function Websocket.accept()
-    suggestion.accept()
-    completion = ""
-    request_id = ""
+    if completion ~= "" and buffer == vim.api.nvim_get_current_buf() then
+        suggestion.accept()
+        completion = ""
+        request_id = ""
+    end
 end
 
 function Websocket.reject()
