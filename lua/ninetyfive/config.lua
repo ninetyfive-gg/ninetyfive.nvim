@@ -12,6 +12,8 @@ Ninetyfive.options = {
     debug = false,
     -- When `true`, enables the plugin on NeoVim startup
     enable_on_startup = false,
+    -- Update server URI, mostly for debugging
+    server = "wss://api.ninetyfive.gg",
     mappings = {
         -- When `true`, creates all the mappings set
         enabled = true,

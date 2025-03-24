@@ -19,9 +19,10 @@ function Ninetyfive.toggle()
 
     -- If the plugin was disabled and is now enabled, set up autocommands and websocket
     if was_disabled and state:get_enabled() then
+        local server = _G.Ninetyfive.config.server
         log.debug("toggle", "Setting up autocommands and websocket after toggle")
         websocket.setup_autocommands()
-        websocket.setup_connection("wss://api.ninetyfive.gg?user_id=12345")
+        websocket.setup_connection(server .. "?user_id=12345")
     end
 end
 
@@ -31,11 +32,13 @@ function Ninetyfive.enable(scope)
         _G.Ninetyfive.config = config.options
     end
 
+    local server = _G.Ninetyfive.config.server
+
     -- Set up autocommands when plugin is enabled
     websocket.setup_autocommands()
 
     -- Set up websocket connection
-    websocket.setup_connection("wss://api.ninetyfive.gg?user_id=12345")
+    websocket.setup_connection(server .. "?user_id=12345")
 
     main.toggle(scope or "public_api_enable")
 end
@@ -53,8 +56,9 @@ function Ninetyfive.setup(opts)
         -- Set up autocommands when plugin is enabled
         websocket.setup_autocommands()
 
+        local server = _G.Ninetyfive.config.server
         -- Set up websocket connection
-        websocket.setup_connection("wss://api.ninetyfive.gg?user_id=12345")
+        websocket.setup_connection(server .. "?user_id=12345")
     end
 end
 
