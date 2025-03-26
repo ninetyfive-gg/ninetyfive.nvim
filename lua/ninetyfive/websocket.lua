@@ -51,8 +51,8 @@ function Websocket.send_message(message)
 end
 
 local function set_workspace()
-    local head = git:get_head()
-    local cwd = git:get_repo_root()
+    local head = git.get_head()
+    local cwd = git.get_repo_root()
     local repo = "unknown"
     if cwd then
         local repo_match = string.match(cwd, "/([^/]+)$")
@@ -143,7 +143,7 @@ local function request_completion(args)
         local pos = #content_to_cursor
 
         -- Repo is the cwd? Is this generally correct with how people use neovim?
-        local cwd = git:get_repo_root()
+        local cwd = git.get_repo_root()
         local repo = "unknown"
         if cwd then
             local repo_match = string.match(cwd, "/([^/]+)$")
@@ -353,6 +353,10 @@ function Websocket.setup_connection(server_uri)
                                 log.debug("messages", "<- [get-commit]")
                                 local commit = git.get_commit(parsed.commitHash)
 
+                                if not commit then
+                                    return
+                                end
+
                                 local send_commit = vim.json.encode({
                                     type = "commit",
                                     commitHash = parsed.commitHash,
@@ -369,21 +373,23 @@ function Websocket.setup_connection(server_uri)
 
                                 local blob = git.get_blob(parsed.commitHash, parsed.path)
 
-                                if blob ~= nil then
-                                    local send_blob = vim.json.encode({
-                                        type = "blob",
-                                        commitHash = parsed.commitHash,
-                                        objectHash = parsed.objectHash,
-                                        path = parsed.path,
-                                        blob = blob.blob,
-                                        diff = blob.diff,
-                                    })
+                                if not blob then
+                                    return
+                                end
 
-                                    log.debug("messages", "-> [blob]", send_blob)
+                                local send_blob = vim.json.encode({
+                                    type = "blob",
+                                    commitHash = parsed.commitHash,
+                                    objectHash = parsed.objectHash,
+                                    path = parsed.path,
+                                    blob = blob.blob,
+                                    diff = blob.diff,
+                                })
 
-                                    if not Websocket.send_message(send_blob) then
-                                        log.debug("websocket", "Failed to send blob")
-                                    end
+                                log.debug("messages", "-> [blob]", send_blob)
+
+                                if not Websocket.send_message(send_blob) then
+                                    log.debug("websocket", "Failed to send blob")
                                 end
                             end
                         else

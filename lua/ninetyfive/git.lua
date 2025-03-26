@@ -17,19 +17,17 @@ end
 
 local function run_git_command(cmd)
     local repo_root = git.get_repo_root()
-    local full_cmd
 
-    if repo_root then
-        -- Execute git command in the repository root
-        full_cmd = string.format("cd %s && %s", repo_root, cmd)
-    else
-        -- Fallback to current directory if not in a git repository
-        full_cmd = cmd
+    -- If not in a git repository, return nil
+    if not repo_root then
+        return nil
     end
+
+    local full_cmd = string.format("cd %s && %s", repo_root, cmd)
 
     local handle = io.popen(full_cmd)
     if not handle then
-        return nil, "Failed"
+        return nil
     end
     local result = handle:read("*a")
     handle:close()
@@ -39,12 +37,12 @@ end
 git.get_head = function()
     local hash = run_git_command("git rev-parse HEAD")
     if not hash then
-        return nil, "Failed to get commit hash"
+        return nil
     end
 
     local branch = run_git_command("git rev-parse --abbrev-ref HEAD")
     if not branch then
-        return nil, "Failed to get branch name"
+        return nil
     end
 
     return { hash = hash, branch = branch }
@@ -96,15 +94,15 @@ end
 function git.get_commit(hash)
     local diff_stdout = run_git_command(string.format("git show --numstat %s", hash))
     if not diff_stdout then
-        return nil, "Failed to get diff"
+        return nil
     end
 
     local diff = parse_diff_numstat(diff_stdout)
 
     local commit_info =
-        run_git_command(string.format("git log -1 --pretty=format:%%P%%n%%B %s", hash))
+    run_git_command(string.format("git log -1 --pretty=format:%%P%%n%%B %s", hash))
     if not commit_info then
-        return nil, "Failed to get commit info"
+        return nil
     end
 
     local parents, message = commit_info:match("([^\n]*)\n(.*)")
@@ -115,7 +113,7 @@ function git.get_commit(hash)
 
     local ls_tree_stdout = run_git_command(string.format("git ls-tree -r -l --full-tree %s", hash))
     if not ls_tree_stdout then
-        return nil, "Failed to get ls-tree"
+        return nil
     end
 
     local ls_tree = parse_ls_tree(ls_tree_stdout)
@@ -147,16 +145,16 @@ end
 function git.get_blob(hash, file)
     -- Get the blob content
     local blob_command = string.format("git show %s:%s", hash, file)
-    local blob, blob_err = run_git_command(blob_command)
+    local blob = run_git_command(blob_command)
     if not blob then
-        return nil, "Failed to get blob: " .. (blob_err or "")
+        return nil
     end
 
     -- Get the diff
     local diff_command = string.format("git diff %s^ %s -- %s", hash, hash, file)
-    local diff, diff_err = run_git_command(diff_command)
+    local diff = run_git_command(diff_command)
     if not diff then
-        return nil, "Failed to get diff: " .. (diff_err or "")
+        return nil
     end
 
     -- Compress and encode blob and diff
@@ -174,8 +172,13 @@ function git.is_ignored(file_path)
         return true
     end
 
+    -- If not in a git repository, consider the file not ignored
+    if not git.get_repo_root() then
+        return false
+    end
+
     local cmd = string.format("git check-ignore %s", file_path)
-    local result = run_git_command(cmd)
+    local result, _ = run_git_command(cmd)
 
     -- An empty result means the file is not ignored
     return result ~= ""
