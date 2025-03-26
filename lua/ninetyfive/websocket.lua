@@ -52,9 +52,15 @@ end
 
 local function set_workspace()
     local head = git.get_head()
-    local cwd = git.get_repo_root()
+    local git_root = git.get_repo_root()
     local repo = "unknown"
-    if cwd then
+    if git_root then
+        local repo_match = string.match(git_root, "/([^/]+)$")
+        if repo_match then
+            repo = repo_match
+        end
+    else
+        local cwd = vim.fn.getcwd()
         local repo_match = string.match(cwd, "/([^/]+)$")
         if repo_match then
             repo = repo_match
@@ -65,7 +71,7 @@ local function set_workspace()
         local set_workspace = vim.json.encode({
             type = "set-workspace",
             commitHash = head.hash,
-            path = cwd,
+            path = git_root,
             name = repo .. "/" .. head.branch,
         })
 
@@ -143,9 +149,15 @@ local function request_completion(args)
         local pos = #content_to_cursor
 
         -- Repo is the cwd? Is this generally correct with how people use neovim?
-        local cwd = git.get_repo_root()
+        local git_root = git.get_repo_root()
         local repo = "unknown"
-        if cwd then
+        if git_root then
+            local repo_match = string.match(git_root, "/([^/]+)$")
+            if repo_match then
+                repo = repo_match
+            end
+        else
+            local cwd = vim.fn.getcwd()
             local repo_match = string.match(cwd, "/([^/]+)$")
             if repo_match then
                 repo = repo_match
