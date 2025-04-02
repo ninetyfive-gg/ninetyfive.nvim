@@ -1,7 +1,28 @@
 local suggestion = {}
 local ninetyfive_ns = vim.api.nvim_create_namespace("ninetyfive_ghost_ns")
+local ninetyfive_edit_ns = vim.api.nvim_create_namespace("ninetyfive_edit_ns")
 
 local completion_id = ""
+
+suggestion.showEditDescription = function(message, edit)
+    local bufnr = vim.api.nvim_get_current_buf()
+
+    vim.api.nvim_buf_clear_namespace(bufnr, ninetyfive_edit_ns, 0, -1)
+
+    local cursor = vim.api.nvim_win_get_cursor(0)
+    local line = cursor[1] - 1
+    local col = cursor[2]
+
+    vim.api.nvim_buf_set_extmark(bufnr, ninetyfive_edit_ns, line, col, {
+        right_gravity = true,
+        virt_text = { { message, "Error" } },
+        virt_text_pos = "eol",
+        hl_mode = "combine",
+        ephemeral = false,
+    })
+
+    print(edit.start, edit["end"])
+end
 
 suggestion.show = function(message)
     local bufnr = vim.api.nvim_get_current_buf()
@@ -23,7 +44,7 @@ suggestion.show = function(message)
     completion_id = vim.api.nvim_buf_set_extmark(bufnr, ninetyfive_ns, line, col, {
         right_gravity = true,
         virt_text = first_line,
-        virt_text_pos = vim.fn.has "nvim-0.10" == 1 and "inline" or "overlay",
+        virt_text_pos = vim.fn.has("nvim-0.10") == 1 and "inline" or "overlay",
         virt_lines = virt_lines,
         hl_mode = "combine",
         ephemeral = false,
@@ -67,7 +88,7 @@ suggestion.accept = function()
 
         -- Inserting the completion has to be done line by line
         local new_line, new_col = line, col
-        
+
         if string.find(extmark_text, "\n") then
             -- Split the ghost text by newlines
             local lines = {}
@@ -98,11 +119,11 @@ suggestion.accept = function()
         end
 
         -- Move cursor to the end of inserted text
-        vim.api.nvim_win_set_cursor(0, {new_line + 1, new_col})
-        
+        vim.api.nvim_win_set_cursor(0, { new_line + 1, new_col })
+
         -- Switch back to insert mode
         vim.cmd("startinsert!")
-        
+
         completion_id = ""
     end
 end

@@ -73,6 +73,7 @@ local function set_workspace()
             commitHash = head.hash,
             path = git_root,
             name = repo .. "/" .. head.branch,
+            features = { "edits" },
         })
 
         log.debug("messages", "-> [set-workspace]", set_workspace)
@@ -83,6 +84,7 @@ local function set_workspace()
     else
         local empty_workspace = vim.json.encode({
             type = "set-workspace",
+            features = { "edits" },
         })
 
         log.debug("messages", "-> [set-workspace] empty")
@@ -114,6 +116,81 @@ local function send_file_content(args)
     if not Websocket.send_message(message) then
         log.debug("websocket", "Failed to send file-content message")
     end
+end
+
+-- Store previous buffer content to calculate deltas
+local previous_content = {}
+
+-- Function to send file delta (changes only)
+local function send_file_delta(args)
+    local bufnr = args.buf
+    local bufname = vim.api.nvim_buf_get_name(bufnr)
+
+    if git.is_ignored(bufname) then
+        log.debug("websocket", "skipping file-delta message - file is git ignored")
+        return
+    end
+
+    -- Get current content
+    local current_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+    local current_content = table.concat(current_lines, "\n")
+
+    if not previous_content[bufnr] then
+        previous_content[bufnr] = current_content
+        return
+    end
+
+    local prev = previous_content[bufnr]
+    local curr = current_content
+
+    -- Find the first differing character
+    local start_pos = 0
+    local min_len = math.min(#prev, #curr)
+
+    while start_pos < min_len do
+        if
+            string.sub(prev, start_pos + 1, start_pos + 1)
+            ~= string.sub(curr, start_pos + 1, start_pos + 1)
+        then
+            break
+        end
+        start_pos = start_pos + 1
+    end
+
+    -- Find the end of the change
+    local prev_end = #prev
+    local curr_end = #curr
+
+    while prev_end > start_pos and curr_end > start_pos do
+        if string.sub(prev, prev_end, prev_end) ~= string.sub(curr, curr_end, curr_end) then
+            break
+        end
+        prev_end = prev_end - 1
+        curr_end = curr_end - 1
+    end
+
+    -- Calculate the replaced text
+    local replaced_text = string.sub(prev, start_pos + 1, prev_end)
+    local new_text = string.sub(curr, start_pos + 1, curr_end)
+
+    -- Calculate end position
+    local end_pos = start_pos + #replaced_text
+
+    local message = vim.json.encode({
+        type = "file-delta",
+        path = bufname,
+        start = start_pos,
+        text = new_text,
+        ["end"] = end_pos,
+    })
+
+    log.debug("messages", "-> [file-delta]", bufname, start_pos, end_pos)
+
+    if not Websocket.send_message(message) then
+        log.debug("websocket", "Failed to send file-delta message")
+    end
+
+    previous_content[bufnr] = current_content
 end
 
 local function request_completion(args)
@@ -235,11 +312,11 @@ function Websocket.setup_autocommands()
         callback = function(args)
             log.debug("autocmd", "CursorMovedI")
 
-            -- Clear old ones
             suggestion.clear()
 
-            request_completion(args)
-            -- TODO should we suggest here?
+            vim.schedule(function()
+                request_completion(args)
+            end)
         end,
     })
 
@@ -247,16 +324,26 @@ function Websocket.setup_autocommands()
         pattern = "*",
         group = ninetyfive_augroup,
         callback = function(args)
-            -- TODO here we should check if we need to send a delta
             log.debug("autocmd", "TextChangedI")
 
-            send_file_content(args)
+            local bufnr = args.buf
 
-            -- Clear old ones
             suggestion.clear()
 
-            -- Check if there's an active completion?
-            request_completion(args)
+            vim.schedule(function()
+                if not previous_content[bufnr] then
+                    log.debug("websocket", "No previous content, sending full file")
+                    send_file_content(args)
+
+                    local content =
+                        table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
+                    previous_content[bufnr] = content
+                else
+                    send_file_delta(args)
+                end
+
+                request_completion(args)
+            end)
         end,
     })
 
@@ -281,8 +368,13 @@ function Websocket.setup_autocommands()
                 -- TODO Is this the right way? This would be per buffer so may trigger more commit/blob requests?
                 set_workspace()
 
-                -- TODO should this happen here
+                -- Send full file content for initial buffer load
                 send_file_content(args)
+
+                -- To check if delta vs content
+                local bufnr = args.buf
+                local content = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
+                previous_content[bufnr] = content
             end)
 
             if not ok then
@@ -394,8 +486,8 @@ function Websocket.setup_connection(server_uri)
                                     commitHash = parsed.commitHash,
                                     objectHash = parsed.objectHash,
                                     path = parsed.path,
-                                    blob = blob.blob,
-                                    diff = blob.diff,
+                                    blobBytes = blob.blob,
+                                    diffBytes = blob.diff,
                                 })
 
                                 log.debug("messages", "-> [blob]", send_blob)
@@ -405,6 +497,11 @@ function Websocket.setup_connection(server_uri)
                                 end
                             end
                         else
+                            if parsed.e ~= nil then
+                                -- print("we got an edit", parsed.ed)
+                                -- suggestion.showEditDescription(parsed.ed, parsed)
+                            end
+
                             if parsed.v and parsed.r == request_id then
                                 log.debug("messages", "<- [completion-response]")
 
