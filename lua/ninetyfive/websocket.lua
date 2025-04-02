@@ -73,7 +73,7 @@ local function set_workspace()
             commitHash = head.hash,
             path = git_root,
             name = repo .. "/" .. head.branch,
-            features = {"edits"},
+            features = { "edits" },
         })
 
         log.debug("messages", "-> [set-workspace]", set_workspace)
@@ -84,7 +84,7 @@ local function set_workspace()
     else
         local empty_workspace = vim.json.encode({
             type = "set-workspace",
-            features = {"edits"},
+            features = { "edits" },
         })
 
         log.debug("messages", "-> [set-workspace] empty")
@@ -135,14 +135,12 @@ local function send_file_delta(args)
     local current_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
     local current_content = table.concat(current_lines, "\n")
 
-    -- If we don't have previous content for this buffer, store it and return
     if not previous_content[bufnr] then
         print("dont have it store")
         previous_content[bufnr] = current_content
         return
     end
 
-    -- Get the changes
     local prev = previous_content[bufnr]
     local curr = current_content
 
@@ -179,19 +177,13 @@ local function send_file_delta(args)
     -- Calculate end position
     local end_pos = start_pos + #replaced_text
 
-    -- Create message table
-    local delta = {
+    local message = vim.json.encode({
         type = "file-delta",
         path = bufname,
         start = start_pos,
         text = new_text,
-    }
-
-    -- Add end field (using this approach to avoid Lua syntax issues with 'end' keyword)
-    delta["end"] = end_pos
-
-    -- Encode to JSON
-    local message = vim.json.encode(delta)
+        ["end"] = end_pos,
+    })
 
     log.debug("messages", "-> [file-delta]", bufname, start_pos, end_pos)
 
@@ -199,7 +191,6 @@ local function send_file_delta(args)
         log.debug("websocket", "Failed to send file-delta message")
     end
 
-    -- Update previous content
     previous_content[bufnr] = current_content
 end
 
@@ -322,13 +313,10 @@ function Websocket.setup_autocommands()
         callback = function(args)
             log.debug("autocmd", "CursorMovedI")
 
-            -- Clear old suggestions immediately (this should be fast)
             suggestion.clear()
 
-            -- Schedule the completion request to run asynchronously
             vim.schedule(function()
                 request_completion(args)
-                -- TODO should we suggest here?
             end)
         end,
     })
@@ -340,27 +328,21 @@ function Websocket.setup_autocommands()
             log.debug("autocmd", "TextChangedI")
 
             local bufnr = args.buf
-            
-            -- Clear old suggestions immediately (this should be fast)
+
             suggestion.clear()
-            
-            -- Schedule the potentially slow operations to run asynchronously
+
             vim.schedule(function()
-                -- If we don't have previous content for this buffer, send the entire file
-                -- Otherwise, send just the delta
                 if not previous_content[bufnr] then
                     log.debug("websocket", "No previous content, sending full file")
                     send_file_content(args)
 
-                    -- Store initial content for delta calculations
-                    local content = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
+                    local content =
+                        table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
                     previous_content[bufnr] = content
                 else
-                    -- Send file delta
                     send_file_delta(args)
                 end
 
-                -- Check if there's an active completion
                 request_completion(args)
             end)
         end,
@@ -390,7 +372,7 @@ function Websocket.setup_autocommands()
                 -- Send full file content for initial buffer load
                 send_file_content(args)
 
-                -- Store initial content for delta calculations
+                -- To check if delta vs content
                 local bufnr = args.buf
                 local content = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
                 previous_content[bufnr] = content
