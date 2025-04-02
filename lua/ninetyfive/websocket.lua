@@ -136,7 +136,6 @@ local function send_file_delta(args)
     local current_content = table.concat(current_lines, "\n")
 
     if not previous_content[bufnr] then
-        print("dont have it store")
         previous_content[bufnr] = current_content
         return
     end
@@ -499,8 +498,8 @@ function Websocket.setup_connection(server_uri)
                             end
                         else
                             if parsed.e ~= nil then
-                                print("we got an edit", parsed.ed)
-                                suggestion.showEditDescription(parsed.ed, parsed)
+                                -- print("we got an edit", parsed.ed)
+                                -- suggestion.showEditDescription(parsed.ed, parsed)
                             end
 
                             if parsed.v and parsed.r == request_id then
