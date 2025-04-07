@@ -1,27 +1,89 @@
 local suggestion = {}
 local ninetyfive_ns = vim.api.nvim_create_namespace("ninetyfive_ghost_ns")
 local ninetyfive_edit_ns = vim.api.nvim_create_namespace("ninetyfive_edit_ns")
+local ninetyfive_hint_ns = vim.api.nvim_create_namespace("ninetyfive_hint_ns")
 
 local completion_id = ""
 
-suggestion.showEditDescription = function(message, edit)
+local function get_pos_from_index(buf, index)
+    local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, true)
+    local char_count = 0
+
+    for line_num, line in ipairs(lines) do
+        local line_len = #line -- No need to add 1 for newline
+        if char_count + line_len >= index then
+            local col = math.min(index - char_count, line_len) -- Clamp to valid range
+            return line_num - 1, col -- Convert to 0-based
+        end
+        char_count = char_count + line_len + 1 -- +1 for newline
+    end
+
+    return #lines - 1, 0 -- Fallback to last line start
+end
+
+suggestion.showDeleteSuggestion = function(start_pos, end_pos, message)
+    -- vim.api.nvim_set_hl(0, "SuggestionDelete", { fg = "red", bg = "none", strikethrough = true })
+
+    local buf = vim.api.nvim_get_current_buf()
+    local start_line, start_col = get_pos_from_index(buf, start_pos)
+    local end_line, end_col = get_pos_from_index(buf, end_pos)
+
+    print("hl", start_line, start_col, end_line, end_col)
+
+    if message == "" or message == nil then
+        vim.api.nvim_buf_set_extmark(buf, ninetyfive_edit_ns, start_line, start_col, {
+            end_row = end_line,
+            end_col = end_col,
+            hl_mode = "replace",
+            hl_group = "Hint",
+            ephemeral = false,
+        })
+    else
+        local virt_lines = {}
+        for _, l in ipairs(vim.fn.split(message, "\n")) do
+            table.insert(virt_lines, { { l, "Error" } })
+        end
+        local first_line = table.remove(virt_lines, 1)
+
+        vim.api.nvim_buf_set_extmark(buf, ninetyfive_edit_ns, start_line, start_col, {
+            virt_text = first_line,
+            virt_text_pos = "overlay",
+            virt_lines = virt_lines,
+            hl_mode = "replace",
+            hl_group = "Error",
+            ephemeral = false,
+        })
+    end
+end
+
+suggestion.showEditDescription = function(message, edits)
     local bufnr = vim.api.nvim_get_current_buf()
 
-    vim.api.nvim_buf_clear_namespace(bufnr, ninetyfive_edit_ns, 0, -1)
+    vim.api.nvim_buf_clear_namespace(bufnr, ninetyfive_hint_ns, 0, -1)
 
     local cursor = vim.api.nvim_win_get_cursor(0)
     local line = cursor[1] - 1
     local col = cursor[2]
 
-    vim.api.nvim_buf_set_extmark(bufnr, ninetyfive_edit_ns, line, col, {
+    vim.api.nvim_buf_set_extmark(bufnr, ninetyfive_hint_ns, line, col, {
         right_gravity = true,
-        virt_text = { { message, "Error" } },
+        virt_text = { { "⇘" .. message, "Hint" } },
         virt_text_pos = "eol",
         hl_mode = "combine",
         ephemeral = false,
     })
 
-    print(edit.start, edit["end"])
+    print("-----")
+    print("Edit description:", message)
+    for i, edit in ipairs(edits) do
+        if edit.start == edit["end"] then
+            print("pure insert-edit")
+        else
+            print("replacement edit", edit.start, edit["end"])
+            suggestion.showDeleteSuggestion(edit.start, edit["end"], edit.text)
+        end
+    end
+    print("-----")
 end
 
 suggestion.show = function(message)

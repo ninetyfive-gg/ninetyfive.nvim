@@ -331,16 +331,16 @@ function Websocket.setup_autocommands()
             suggestion.clear()
 
             vim.schedule(function()
-                if not previous_content[bufnr] then
-                    log.debug("websocket", "No previous content, sending full file")
-                    send_file_content(args)
+                -- if not previous_content[bufnr] then
+                -- log.debug("websocket", "No previous content, sending full file")
+                send_file_content(args)
 
-                    local content =
-                        table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
-                    previous_content[bufnr] = content
-                else
-                    send_file_delta(args)
-                end
+                --     local content =
+                --         table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
+                --     previous_content[bufnr] = content
+                -- else
+                --     send_file_delta(args)
+                -- end
 
                 request_completion(args)
             end)
@@ -498,8 +498,8 @@ function Websocket.setup_connection(server_uri)
                             end
                         else
                             if parsed.e ~= nil then
-                                -- print("we got an edit", parsed.ed)
-                                -- suggestion.showEditDescription(parsed.ed, parsed)
+                                suggestion.showEditDescription(parsed.ed, parsed.e)
+                                -- suggestion.showDeleteSuggestion()
                             end
 
                             if parsed.v and parsed.r == request_id then
