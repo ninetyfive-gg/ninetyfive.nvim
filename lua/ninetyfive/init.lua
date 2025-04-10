@@ -22,7 +22,7 @@ function Ninetyfive.toggle()
         local server = _G.Ninetyfive.config.server
         log.debug("toggle", "Setting up autocommands and websocket after toggle")
         websocket.setup_autocommands()
-        websocket.setup_connection(server .. "?user_id=12345")
+        websocket.setup_connection(server)
     end
 end
 
@@ -38,7 +38,7 @@ function Ninetyfive.enable(scope)
     websocket.setup_autocommands()
 
     -- Set up websocket connection
-    websocket.setup_connection(server .. "?user_id=12345")
+    websocket.setup_connection(server)
 
     main.toggle(scope or "public_api_enable")
 end
@@ -58,7 +58,7 @@ function Ninetyfive.setup(opts)
 
         local server = _G.Ninetyfive.config.server
         -- Set up websocket connection
-        websocket.setup_connection(server .. "?user_id=12345")
+        websocket.setup_connection(server)
     end
 end
 

@@ -442,7 +442,7 @@ function Websocket.setup_connection(server_uri)
 
     _G.Ninetyfive.websocket_job = vim.fn.jobstart({
         binary_path,
-        server_uri,
+        server_uri .. "?user_id=12345" .. "&editor=neovim",
     }, {
         on_stdout = function(_, data, _)
             if data and #data > 0 then
