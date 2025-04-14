@@ -1,6 +1,6 @@
 local log = require("ninetyfive.util.log")
-local Queue = require("ninetyfive.queue")
 local suggestion = require("ninetyfive.suggestion")
+local completion = require("ninetyfive.completion")
 local git = require("ninetyfive.git")
 
 local Websocket = {}
@@ -11,9 +11,8 @@ local max_reconnect_attempts = 300
 local reconnect_delay = 1000
 
 -- Variable to store aggregated ghost text
-local completion = ""
+local current_completion = nil
 local buffer = nil
-local request_id = ""
 
 -- Function to send a message to the websocket
 function Websocket.send_message(message)
@@ -241,10 +240,7 @@ local function request_completion(args)
         end
 
         -- Generate a request ID
-        request_id = tostring(os.time()) .. "_" .. tostring(math.random(1000, 9999))
-
-        -- Clear the aggregated ghost text when sending a new completion request
-        completion = ""
+        local request_id = tostring(os.time()) .. "_" .. tostring(math.random(1000, 9999))
 
         buffer = bufnr
 
@@ -261,8 +257,7 @@ local function request_completion(args)
             log.debug("websocket", "Failed to send delta-completion-request message")
         end
 
-        -- TODO clear completion?
-        completion = ""
+        current_completion = completion.new(request_id)
     end)
 
     if not ok then
@@ -274,22 +269,27 @@ local function request_completion(args)
 end
 
 function Websocket.accept()
-    if completion ~= "" and buffer == vim.api.nvim_get_current_buf() then
+    if
+        current_completion ~= nil
+        and current_completion.completion ~= ""
+        and buffer == vim.api.nvim_get_current_buf()
+    then
         suggestion.accept()
 
         local message = vim.json.encode({
             type = "accept-completion",
-            completion = request_id,
+            completion = current_completion.request_id,
         })
 
-        log.debug("messages", "-> [accept-completion]", request_id)
+        log.debug("messages", "-> [accept-completion]", current_completion.request_id)
 
         if not Websocket.send_message(message) then
             log.debug("websocket", "Failed to send accept-completion message")
         end
 
-        completion = ""
-        request_id = ""
+        -- TODO we only clear the completion once its been consumed, or cancelled...
+        -- completion = ""
+        -- request_id = ""
     end
 end
 
@@ -502,17 +502,22 @@ function Websocket.setup_connection(server_uri)
                                 -- suggestion.showDeleteSuggestion()
                             end
 
-                            if parsed.v and parsed.r == request_id then
+                            if
+                                current_completion ~= nil
+                                and parsed.v
+                                and parsed.r == current_completion.request_id
+                            then
                                 log.debug("messages", "<- [completion-response]")
 
                                 if parsed.v == vim.NIL then
                                     print("nil")
                                 else
-                                    completion = completion .. tostring(parsed.v)
-                                    print("append", completion)
+                                    current_completion.completion = current_completion.completion
+                                        .. tostring(parsed.v)
+                                    print("append", current_completion.completion)
                                 end
 
-                                suggestion.show(completion)
+                                suggestion.show(current_completion.completion)
                             end
                         end
                     end
@@ -574,11 +579,15 @@ function Websocket.setup_connection(server_uri)
 end
 
 function Websocket.get_completion()
-    return completion
+    if current_completion == nil then
+        return ""
+    end
+
+    return current_completion.completion
 end
 
 function Websocket.reset_completion()
-    completion = ""
+    current_completion = nil
 end
 
 return Websocket
