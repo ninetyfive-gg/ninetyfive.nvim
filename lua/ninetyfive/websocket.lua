@@ -14,7 +14,6 @@ local reconnect_delay = 1000
 local completion = ""
 local buffer = nil
 local request_id = ""
-local completion_queue = Queue.New()
 
 -- Function to send a message to the websocket
 function Websocket.send_message(message)
@@ -262,7 +261,8 @@ local function request_completion(args)
             log.debug("websocket", "Failed to send delta-completion-request message")
         end
 
-        Queue.clear(completion_queue)
+        -- TODO clear completion?
+        completion = ""
     end)
 
     if not ok then
@@ -498,7 +498,7 @@ function Websocket.setup_connection(server_uri)
                             end
                         else
                             if parsed.e ~= nil then
-                                suggestion.showEditDescription(parsed.ed, parsed.e)
+                                -- suggestion.showEditDescription(parsed.ed, parsed.e)
                                 -- suggestion.showDeleteSuggestion()
                             end
 
@@ -506,30 +506,13 @@ function Websocket.setup_connection(server_uri)
                                 log.debug("messages", "<- [completion-response]")
 
                                 if parsed.v == vim.NIL then
-                                    Queue.append(completion_queue, completion, true)
+                                    print("nil")
                                 else
                                     completion = completion .. tostring(parsed.v)
-                                    if
-                                        Queue.length(completion_queue) == 0
-                                        and string.find(parsed.v, "\n")
-                                    then
-                                        local new_line_idx = completion:match(".*\n()") or -1
-
-                                        if new_line_idx == 1 then
-                                            return
-                                        end
-
-                                        local line = completion:sub(1, new_line_idx - 1)
-                                        Queue.append(completion_queue, line, false)
-                                        completion = string.sub(completion, 1, new_line_idx)
-                                    end
+                                    print("append", completion)
                                 end
 
-                                -- We could have a suggestion here, try to show it
-                                local current_completion = Queue.pop(completion_queue)
-                                if current_completion ~= nil then
-                                    suggestion.show(current_completion.completion)
-                                end
+                                suggestion.show(completion)
                             end
                         end
                     end
