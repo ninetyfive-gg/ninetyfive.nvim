@@ -19,6 +19,7 @@ Ninetyfive.options = {
         enabled = true,
         -- Sets a global mapping to accept a suggestion
         accept = "<C-f>",
+        accept_edit = "<C-g>",
         -- Sets a global mapping to reject a suggestion
         reject = "<C-w>",
     },

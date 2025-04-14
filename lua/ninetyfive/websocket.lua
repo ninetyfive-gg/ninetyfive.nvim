@@ -268,6 +268,10 @@ local function request_completion(args)
     suggestion.clear()
 end
 
+function Websocket.accept_edit()
+
+end
+
 function Websocket.accept()
     if
         current_completion ~= nil
@@ -275,17 +279,31 @@ function Websocket.accept()
         and buffer == vim.api.nvim_get_current_buf()
     then
         suggestion.accept()
+        current_completion:consume(string.len(current_completion.completion))
 
-        local message = vim.json.encode({
-            type = "accept-completion",
-            completion = current_completion.request_id,
-        })
+        -- After accepting we can process the edits
+        suggestion.showEditDescription(current_completion)
 
-        log.debug("messages", "-> [accept-completion]", current_completion.request_id)
+        local edit = current_completion:next_edit()
 
-        if not Websocket.send_message(message) then
-            log.debug("websocket", "Failed to send accept-completion message")
+        if edit.start == edit["end"] then
+            print("pure insert-edit")
+        else
+            print("replacement edit", edit.start, edit["end"])
+            suggestion.showDeleteSuggestion(edit.start, edit["end"], edit.text)
         end
+
+        -- Notify completion accept
+        -- local message = vim.json.encode({
+        --     type = "accept-completion",
+        --     completion = current_completion.request_id,
+        -- })
+
+        -- log.debug("messages", "-> [accept-completion]", current_completion.request_id)
+
+        -- if not Websocket.send_message(message) then
+        --     log.debug("websocket", "Failed to send accept-completion message")
+        -- end
 
         -- TODO we only clear the completion once its been consumed, or cancelled...
         -- completion = ""
