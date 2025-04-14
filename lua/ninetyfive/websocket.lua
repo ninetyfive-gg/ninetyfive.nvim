@@ -497,28 +497,30 @@ function Websocket.setup_connection(server_uri)
                                 end
                             end
                         else
-                            if parsed.e ~= nil then
-                                -- suggestion.showEditDescription(parsed.ed, parsed.e)
-                                -- suggestion.showDeleteSuggestion()
+                            if
+                                current_completion == nil
+                                or current_completion.request_id ~= parsed.r
+                            then
+                                return
                             end
 
-                            if
-                                current_completion ~= nil
-                                and parsed.v
-                                and parsed.r == current_completion.request_id
-                            then
+                            if parsed.v ~= nil then
                                 log.debug("messages", "<- [completion-response]")
 
-                                if parsed.v == vim.NIL then
-                                    print("nil")
-                                else
+                                if parsed.v ~= vim.NIL then
                                     current_completion.completion = current_completion.completion
                                         .. tostring(parsed.v)
-                                    print("append", current_completion.completion)
                                 end
-
-                                suggestion.show(current_completion.completion)
                             end
+
+                            if parsed.e then
+                                current_completion.edits = parsed.e
+                                current_completion.edit_description = parsed.ed
+                                current_completion:close()
+                            end
+
+                            -- We still need to show stuff here
+                            suggestion.show(current_completion.completion)
                         end
                     end
                 end
