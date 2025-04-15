@@ -64,9 +64,8 @@ local function register_mappings(options, mappings)
         end
 
         assert(type(options[name]) == "string", string.format("`%s` must be a string", name))
-        -- We set the keymap for insert mode!
-        -- Since we expose the :Ninetyfive<> commands, an user could still accept when not in insert mode?
-        vim.api.nvim_set_keymap("i", options[name], command, { noremap = true, silent = true })
+        -- We set the keymap for normal and insert mode!
+        vim.keymap.set({ "n", "i" }, options[name], command, { noremap = true, silent = true })
     end
 end
 
