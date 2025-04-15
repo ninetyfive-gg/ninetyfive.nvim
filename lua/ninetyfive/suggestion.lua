@@ -127,35 +127,24 @@ suggestion.accept_edit = function(current_completion)
     end
 
     local edit = current_completion.edits[edit_index]
-    local row, col = get_pos_from_index(bufnr, edit.start)
+    local start_row, start_col = get_pos_from_index(bufnr, edit.start)
+    local end_row, end_col = get_pos_from_index(bufnr, edit["end"])
 
     vim.api.nvim_buf_clear_namespace(bufnr, ninetyfive_hint_ns, 0, -1)
     vim.api.nvim_buf_clear_namespace(bufnr, ninetyfive_edit_ns, 0, -1)
 
     local edit_text = edit.text
     if string.find(edit_text, "\n") then
-        -- Split the ghost text by newlines
         local lines = {}
         for s in string.gmatch(edit_text, "[^\n]+") do
             table.insert(lines, s)
         end
 
-        -- Insert the first line at the cursor position
-        if #lines > 0 then
-            vim.api.nvim_buf_set_text(bufnr, row, col, row, col, { lines[1] })
-        end
+        -- TODO does this ever override some text from the last line after the edit???
 
-        -- Insert the rest of the lines as new lines
-        if #lines > 1 then
-            local new_lines = {}
-            for i = 2, #lines do
-                table.insert(new_lines, lines[i])
-            end
-            vim.api.nvim_buf_set_lines(bufnr, row + 1, row + 1, false, new_lines)
-        end
+        vim.api.nvim_buf_set_text(bufnr, start_row, start_col, end_row, end_col, lines)
     else
-        -- No newlines, just insert the text
-        vim.api.nvim_buf_set_text(bufnr, row, col, row, col, { edit_text })
+        vim.api.nvim_buf_set_text(bufnr, start_row, start_col, end_row, end_col, { edit_text })
     end
 
     -- Move cursor to the end of inserted text
