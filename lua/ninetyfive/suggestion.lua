@@ -121,25 +121,22 @@ end
 suggestion.accept_edit = function(current_completion)
     local bufnr = vim.api.nvim_get_current_buf()
     local edit_index = current_completion.edit_index - 1
-    print("index on accept", edit_index)
 
     if edit_index < 0 then
-        print("nope")
         return
     end
 
-    local pos = vim.api.nvim_win_get_cursor(0)
-    local row = pos[1] - 1
-    local col = pos[2]
+    local edit = current_completion.edits[edit_index]
+    local row, col = get_pos_from_index(bufnr, edit.start)
 
     vim.api.nvim_buf_clear_namespace(bufnr, ninetyfive_hint_ns, 0, -1)
     vim.api.nvim_buf_clear_namespace(bufnr, ninetyfive_edit_ns, 0, -1)
 
-    local extmark_text = current_completion.edits[edit_index].text
-    if string.find(extmark_text, "\n") then
+    local edit_text = edit.text
+    if string.find(edit_text, "\n") then
         -- Split the ghost text by newlines
         local lines = {}
-        for s in string.gmatch(extmark_text, "[^\n]+") do
+        for s in string.gmatch(edit_text, "[^\n]+") do
             table.insert(lines, s)
         end
 
@@ -158,7 +155,7 @@ suggestion.accept_edit = function(current_completion)
         end
     else
         -- No newlines, just insert the text
-        vim.api.nvim_buf_set_text(bufnr, row, col, row, col, { extmark_text })
+        vim.api.nvim_buf_set_text(bufnr, row, col, row, col, { edit_text })
     end
 
     -- Move cursor to the end of inserted text
