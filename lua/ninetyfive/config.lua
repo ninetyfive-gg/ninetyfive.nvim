@@ -82,6 +82,7 @@ function Ninetyfive.setup(options)
 
     register_mappings(Ninetyfive.options.mappings, {
         accept = "<Esc>:NinetyfiveAccept<CR>",
+        accept_edit = "<Esc>:NinetyfiveAcceptEdit<CR>",
         reject = "<Esc>:NinetyfiveReject<CR>",
     })
 

@@ -13,7 +13,7 @@ local reconnect_delay = 1000
 -- Variable to store aggregated ghost text
 local current_completion = nil
 local buffer = nil
-
+local active_text = nil
 -- Function to send a message to the websocket
 function Websocket.send_message(message)
     -- Check if the global table exists
@@ -46,6 +46,29 @@ function Websocket.send_message(message)
 
     log.debug("websocket", "Sent message to websocket")
     return true
+end
+
+local function send_file_content()
+    local bufnr = vim.api.nvim_get_current_buf()
+    local bufname = vim.api.nvim_buf_get_name(bufnr)
+    local content = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
+
+    if git.is_ignored(bufname) then
+        log.debug("websocket", "skipping file-content message - file is git ignored")
+        return
+    end
+
+    local message = vim.json.encode({
+        type = "file-content",
+        path = bufname,
+        text = content,
+    })
+
+    log.debug("messages", "-> [file-content]", bufname)
+
+    if not Websocket.send_message(message) then
+        log.debug("websocket", "Failed to send file-content message")
+    end
 end
 
 local function set_workspace()
@@ -90,34 +113,16 @@ local function set_workspace()
         if not Websocket.send_message(empty_workspace) then
             log.debug("websocket", "Failed to empty set-workspace")
         end
+
+        local bufnr = vim.api.nvim_get_current_buf()
+        local curr_text = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
+        if active_text ~= curr_text then
+            active_text = curr_text
+            send_file_content()
+            current_completion = nil
+        end
     end
 end
-
-local function send_file_content(args)
-    local bufnr = args.buf
-    local bufname = vim.api.nvim_buf_get_name(bufnr)
-    local content = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
-
-    if git.is_ignored(bufname) then
-        log.debug("websocket", "skipping file-content message - file is git ignored")
-        return
-    end
-
-    local message = vim.json.encode({
-        type = "file-content",
-        path = bufname,
-        text = content,
-    })
-
-    log.debug("messages", "-> [file-content]", bufname)
-
-    if not Websocket.send_message(message) then
-        log.debug("websocket", "Failed to send file-content message")
-    end
-end
-
--- Store previous buffer content to calculate deltas
-local previous_content = {}
 
 -- Function to send file delta (changes only)
 local function send_file_delta(args)
@@ -133,12 +138,12 @@ local function send_file_delta(args)
     local current_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
     local current_content = table.concat(current_lines, "\n")
 
-    if not previous_content[bufnr] then
-        previous_content[bufnr] = current_content
+    if not active_text then
+        active_text = current_content
         return
     end
 
-    local prev = previous_content[bufnr]
+    local prev = active_text
     local curr = current_content
 
     -- Find the first differing character
@@ -187,11 +192,14 @@ local function send_file_delta(args)
     if not Websocket.send_message(message) then
         log.debug("websocket", "Failed to send file-delta message")
     end
-
-    previous_content[bufnr] = current_content
 end
 
 local function request_completion(args)
+    if current_completion ~= nil then
+        print("dont request completion!!")
+        return -- TODO we're missing a bunch of places that should clear current_completion
+    end
+    print("requested completion")
     local ok, err = pcall(function()
         -- Check that we're connected
         if
@@ -269,7 +277,11 @@ local function request_completion(args)
 end
 
 function Websocket.accept_edit()
-
+    print("edit!")
+    if current_completion then
+        print("second", current_completion.edit_index)
+        suggestion.accept_edit(current_completion)
+    end
 end
 
 function Websocket.accept()
@@ -285,12 +297,16 @@ function Websocket.accept()
         suggestion.showEditDescription(current_completion)
 
         local edit = current_completion:next_edit()
+        print("len", #current_completion.edits)
+        print(current_completion.edits[0], current_completion.edits[1])
 
         if edit.start == edit["end"] then
             print("pure insert-edit")
         else
             print("replacement edit", edit.start, edit["end"])
             suggestion.showDeleteSuggestion(edit.start, edit["end"], edit.text)
+            current_completion.edit_index = current_completion.edit_index + 1
+            print("first", current_completion.edit_index)
         end
 
         -- Notify completion accept
@@ -349,17 +365,31 @@ function Websocket.setup_autocommands()
             suggestion.clear()
 
             vim.schedule(function()
-                -- if not previous_content[bufnr] then
-                -- log.debug("websocket", "No previous content, sending full file")
-                send_file_content(args)
+                local curr_text =
+                    table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
+                if active_text == nil then
+                    print("file")
+                    log.debug("websocket", "No previous content, sending full file")
+                    send_file_content()
+                    current_completion = nil
+                else
+                    print("delta")
+                    send_file_delta(args)
 
-                --     local content =
-                --         table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
-                --     previous_content[bufnr] = content
-                -- else
-                --     send_file_delta(args)
-                -- end
+                    if
+                        current_completion
+                        and current_completion.is_closed
+                        and current_completion.consumed
+                            == string.len(current_completion.completion)
+                    then
+                        --TODO this is missing the edit case
+                    else
+                        print("clear cus not in edit")
+                        current_completion = nil
+                    end
+                end
 
+                active_text = curr_text
                 request_completion(args)
             end)
         end,
@@ -387,12 +417,7 @@ function Websocket.setup_autocommands()
                 set_workspace()
 
                 -- Send full file content for initial buffer load
-                send_file_content(args)
-
-                -- To check if delta vs content
-                local bufnr = args.buf
-                local content = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
-                previous_content[bufnr] = content
+                send_file_content()
             end)
 
             if not ok then

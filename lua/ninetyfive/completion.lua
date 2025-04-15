@@ -12,12 +12,12 @@ function Completion.new(request_id)
     self.is_closed = false
     self.edits = {}
     self.edit_description = ""
-    self.edit_index = 0
+    self.edit_index = 1
 
+    self.is_active = false
     self.isJumpEdit = false
     self.isInlineEdit = false
     self.isJumpHint = false
-    self.isActive = false
     self.hint = ""
     self.buffer = nil
     self.offset = 0
@@ -44,7 +44,7 @@ end
 
 function Completion:next_edit()
     if self.is_closed and self.consumed == #self.completion and self.edit_index < #self.edits then
-        return self.edits[self.edit_index + 1]
+        return self.edits[self.edit_index]
     end
 end
 

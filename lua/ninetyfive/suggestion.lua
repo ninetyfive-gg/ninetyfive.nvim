@@ -1,5 +1,4 @@
 local log = require("ninetyfive.util.log")
-local completion = require("ninetyfive.completion")
 
 local suggestion = {}
 local ninetyfive_ns = vim.api.nvim_create_namespace("ninetyfive_ghost_ns")
@@ -77,7 +76,6 @@ suggestion.showEditDescription = function(completion)
     -- Clear previous hints
     vim.api.nvim_buf_clear_namespace(bufnr, ninetyfive_hint_ns, 0, -1)
     vim.api.nvim_buf_clear_namespace(bufnr, ninetyfive_edit_ns, 0, -1)
-    -- vim.api.nvim_buf_clear_namespace(bufnr, ninetyfive_delete_ns, 0, -1)
 
     local cursor = vim.api.nvim_win_get_cursor(0)
     local line = cursor[1] - 1
@@ -118,6 +116,53 @@ suggestion.show = function(message)
         hl_mode = "combine",
         ephemeral = false,
     })
+end
+
+suggestion.accept_edit = function(current_completion)
+    local bufnr = vim.api.nvim_get_current_buf()
+    local edit_index = current_completion.edit_index - 1
+    print("index on accept", edit_index)
+
+    if edit_index < 0 then
+        print("nope")
+        return
+    end
+
+    local pos = vim.api.nvim_win_get_cursor(0)
+    local row = pos[1] - 1
+    local col = pos[2]
+
+    vim.api.nvim_buf_clear_namespace(bufnr, ninetyfive_hint_ns, 0, -1)
+    vim.api.nvim_buf_clear_namespace(bufnr, ninetyfive_edit_ns, 0, -1)
+
+    local extmark_text = current_completion.edits[edit_index].text
+    if string.find(extmark_text, "\n") then
+        -- Split the ghost text by newlines
+        local lines = {}
+        for s in string.gmatch(extmark_text, "[^\n]+") do
+            table.insert(lines, s)
+        end
+
+        -- Insert the first line at the cursor position
+        if #lines > 0 then
+            vim.api.nvim_buf_set_text(bufnr, row, col, row, col, { lines[1] })
+        end
+
+        -- Insert the rest of the lines as new lines
+        if #lines > 1 then
+            local new_lines = {}
+            for i = 2, #lines do
+                table.insert(new_lines, lines[i])
+            end
+            vim.api.nvim_buf_set_lines(bufnr, row + 1, row + 1, false, new_lines)
+        end
+    else
+        -- No newlines, just insert the text
+        vim.api.nvim_buf_set_text(bufnr, row, col, row, col, { extmark_text })
+    end
+
+    -- Move cursor to the end of inserted text
+    -- vim.api.nvim_win_set_cursor(0, { new_line + 1, new_col })
 end
 
 suggestion.accept = function()
