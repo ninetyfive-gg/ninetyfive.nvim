@@ -127,6 +127,11 @@ suggestion.accept_edit = function(current_completion)
     end
 
     local edit = current_completion.edits[edit_index]
+
+    if not edit then
+        return
+    end
+
     local start_row, start_col = get_pos_from_index(bufnr, edit.start)
     local end_row, end_col = get_pos_from_index(bufnr, edit["end"])
 

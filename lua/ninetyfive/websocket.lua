@@ -308,12 +308,14 @@ function Websocket.accept()
         suggestion.accept()
         current_completion:consume(string.len(current_completion.completion))
 
+        local edit = current_completion:next_edit()
+
+        -- Don't even show the edit description if there are no edits
+        if not edit then
+            return
+        end
         -- After accepting we can process the edits
         suggestion.showEditDescription(current_completion)
-
-        local edit = current_completion:next_edit()
-        print("len", #current_completion.edits)
-        print(current_completion.edits[0], current_completion.edits[1])
 
         if edit.start == edit["end"] then
             print("pure insert-edit")
@@ -321,7 +323,6 @@ function Websocket.accept()
             print("replacement edit", edit.start, edit["end"])
             suggestion.showDeleteSuggestion(edit.start, edit["end"], edit.text)
             current_completion.edit_index = current_completion.edit_index + 1
-            print("first", current_completion.edit_index)
         end
 
         -- Notify completion accept
