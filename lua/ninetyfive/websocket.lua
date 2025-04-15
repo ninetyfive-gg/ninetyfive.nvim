@@ -277,9 +277,7 @@ local function request_completion(args)
 end
 
 function Websocket.accept_edit()
-    print("edit!")
     if current_completion then
-        print("second", current_completion.edit_index)
         suggestion.accept_edit(current_completion)
 
         -- Check next edit
@@ -384,12 +382,10 @@ function Websocket.setup_autocommands()
                 local curr_text =
                     table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
                 if active_text == nil then
-                    print("file")
                     log.debug("websocket", "No previous content, sending full file")
                     send_file_content()
                     current_completion = nil
                 else
-                    print("delta")
                     send_file_delta(args)
 
                     if
@@ -400,7 +396,6 @@ function Websocket.setup_autocommands()
                     then
                         --TODO this is missing the edit case
                     else
-                        print("clear cus not in edit")
                         current_completion = nil
                     end
                 end

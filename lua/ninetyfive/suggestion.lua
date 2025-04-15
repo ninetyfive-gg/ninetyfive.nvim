@@ -28,37 +28,40 @@ suggestion.showDeleteSuggestion = function(start_pos, end_pos, message)
     local start_line, start_col = get_pos_from_index(buf, start_pos)
     local end_line, end_col = get_pos_from_index(buf, end_pos)
 
-    if message == "" or message == nil then
-        vim.api.nvim_buf_set_extmark(buf, ninetyfive_edit_ns, start_line, start_col, {
-            end_row = end_line,
-            end_col = end_col,
-            hl_mode = "replace",
-            hl_group = "Hint",
-            ephemeral = false,
-        })
-    else
-        local virt_lines = {}
-        local message_lines = vim.fn.split(message, "\n")
+    -- Clear previous highlights in the namespace
+    vim.api.nvim_buf_clear_namespace(buf, ninetyfive_edit_ns, 0, -1)
 
-        for i, l in ipairs(message_lines) do
-            -- For the LAST line, append the tail (if it exists)
-            if i == #message_lines then
-                local end_line_text = vim.api.nvim_buf_get_lines(buf, end_line, end_line + 1, false)[1]
-                    or ""
-                local tail = end_line_text:sub(end_col + 1)
-                if tail ~= "" then
-                    l = l .. tail -- Append tail to the last error line
-                end
-            end
-            table.insert(virt_lines, { { l, "DiffText" } })
+    -- Then overlay the message text on top of the range
+    local message_lines = vim.fn.split(message, "\n")
+    local num_lines = end_line - start_line + 1
+
+    -- Handle the case where message has more or fewer lines than the range
+    local lines_to_show = math.min(#message_lines, num_lines)
+
+    for i = 1, lines_to_show do
+        local line_text = message_lines[i]
+        local current_line = start_line + i - 1
+        local current_col = 0
+
+        -- For the first line, use start_col
+        if i == 1 then
+            current_col = start_col
         end
 
-        local first_line = table.remove(virt_lines, 1)
+        -- For the LAST line, append the tail (if it exists)
+        if i == #message_lines and i == lines_to_show and current_line == end_line then
+            local end_line_text = vim.api.nvim_buf_get_lines(buf, end_line, end_line + 1, false)[1]
+                or ""
+            local tail = end_line_text:sub(end_col + 1)
+            if tail ~= "" then
+                line_text = line_text .. tail -- Append tail to the last error line
+            end
+        end
 
-        vim.api.nvim_buf_set_extmark(buf, ninetyfive_edit_ns, start_line, start_col, {
-            virt_text = first_line,
+        -- Create an extmark for each line with overlay text
+        vim.api.nvim_buf_set_extmark(buf, ninetyfive_edit_ns, current_line, current_col, {
+            virt_text = { { line_text, "Error" } },
             virt_text_pos = "overlay",
-            virt_lines = virt_lines,
             hl_mode = "replace",
             ephemeral = false,
         })
