@@ -146,9 +146,6 @@ suggestion.accept_edit = function(current_completion)
     else
         vim.api.nvim_buf_set_text(bufnr, start_row, start_col, end_row, end_col, { edit_text })
     end
-
-    -- Move cursor to the end of inserted text
-    -- vim.api.nvim_win_set_cursor(0, { new_line + 1, new_col })
 end
 
 suggestion.accept = function()

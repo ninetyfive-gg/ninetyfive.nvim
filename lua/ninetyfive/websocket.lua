@@ -281,6 +281,21 @@ function Websocket.accept_edit()
     if current_completion then
         print("second", current_completion.edit_index)
         suggestion.accept_edit(current_completion)
+
+        -- Check next edit
+        local edit = current_completion:next_edit()
+
+        if not edit then
+            return
+        end
+
+        if edit.start == edit["end"] then
+            print("pure insert-edit")
+        else
+            print("replacement edit", edit.start, edit["end"])
+            suggestion.showDeleteSuggestion(edit.start, edit["end"], edit.text)
+            current_completion.edit_index = current_completion.edit_index + 1
+        end
     end
 end
 
