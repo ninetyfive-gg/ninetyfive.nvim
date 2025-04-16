@@ -280,7 +280,7 @@ function Websocket.accept_edit()
     if current_completion then
         suggestion.accept_edit(current_completion)
 
-        if current_completion.edit_index == #current_completion.edits then
+        if current_completion.edit_index > #current_completion.edits then
             current_completion = nil
             print("we're done processing edits!")
             return
@@ -581,7 +581,9 @@ function Websocket.setup_connection(server_uri)
                             end
 
                             if parsed.e then
+                                print(message)
                                 current_completion.edits = parsed.e
+                                print("len", #current_completion.edits)
                                 current_completion.edit_description = parsed.ed
                                 current_completion:close()
                             end

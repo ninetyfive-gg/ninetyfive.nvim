@@ -43,7 +43,7 @@ function Completion:close()
 end
 
 function Completion:next_edit()
-    if self.is_closed and self.consumed == #self.completion and self.edit_index < #self.edits then
+    if self.is_closed and self.consumed == #self.completion and self.edit_index <= #self.edits then
         return self.edits[self.edit_index]
     end
 end
