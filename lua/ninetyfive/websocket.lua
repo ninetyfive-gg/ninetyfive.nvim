@@ -280,6 +280,12 @@ function Websocket.accept_edit()
     if current_completion then
         suggestion.accept_edit(current_completion)
 
+        if current_completion.edit_index == #current_completion.edits then
+            current_completion = nil
+            print("we're done processing edits!")
+            return
+        end
+
         -- Check next edit
         local edit = current_completion:next_edit()
 
@@ -314,6 +320,8 @@ function Websocket.accept()
         end
         -- After accepting we can process the edits
         suggestion.showEditDescription(current_completion)
+
+        current_completion.is_active = true
 
         if edit.start == edit["end"] then
             print("pure insert-edit")
@@ -386,7 +394,8 @@ function Websocket.setup_autocommands()
                     send_file_content()
                     current_completion = nil
                 else
-                    send_file_delta(args)
+                    --TODO this should be a delta instead but there is something off
+                    send_file_content()
 
                     if
                         current_completion
@@ -394,6 +403,10 @@ function Websocket.setup_autocommands()
                         and current_completion.consumed
                             == string.len(current_completion.completion)
                     then
+                        -- we have consumed the completion we're not in edit mode
+                        if not current_completion.is_active then
+                            current_completion = nil
+                        end
                         --TODO this is missing the edit case
                     else
                         current_completion = nil
