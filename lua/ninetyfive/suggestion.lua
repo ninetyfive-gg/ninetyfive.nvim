@@ -60,7 +60,7 @@ suggestion.showDeleteSuggestion = function(start_pos, end_pos, message)
 
         -- Create an extmark for each line with overlay text
         vim.api.nvim_buf_set_extmark(buf, ninetyfive_edit_ns, current_line, current_col, {
-            virt_text = { { line_text, "Error" } },
+            virt_text = { { line_text, "DiffChange" } },
             virt_text_pos = "overlay",
             hl_mode = "replace",
             ephemeral = false,
