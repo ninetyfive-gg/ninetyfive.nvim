@@ -15,14 +15,6 @@ function Completion.new(request_id)
     self.edit_index = 1
 
     self.is_active = false
-    self.isJumpEdit = false
-    self.isInlineEdit = false
-    self.isJumpHint = false
-    self.hint = ""
-    self.buffer = nil
-    self.offset = 0
-    self.jumpDestLine = 0
-    self.jumpDestCol = 0
     return self
 end
 
