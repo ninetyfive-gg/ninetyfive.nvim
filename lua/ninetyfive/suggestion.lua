@@ -48,16 +48,6 @@ suggestion.showInsertSuggestion = function(start_pos, end_pos, message)
             current_col = start_col
         end
 
-        -- For the LAST line, append the tail (if it exists)
-        if i == #message_lines and i == lines_to_show and current_line == end_line then
-            local end_line_text = vim.api.nvim_buf_get_lines(buf, end_line, end_line + 1, false)[1]
-                or ""
-            local tail = end_line_text:sub(end_col + 1)
-            if tail ~= "" then
-                line_text = line_text .. tail -- Append tail to the last error line
-            end
-        end
-
         -- Create an extmark for each line with overlay text
         vim.api.nvim_buf_set_extmark(buf, ninetyfive_edit_ns, current_line, current_col, {
             virt_text = { { line_text, "DiffAdd" } },
