@@ -196,10 +196,8 @@ end
 
 local function request_completion(args)
     if current_completion ~= nil then
-        print("dont request completion!!")
-        return -- TODO we're missing a bunch of places that should clear current_completion
+        return
     end
-    print("requested completion")
     local ok, err = pcall(function()
         -- Check that we're connected
         if
@@ -282,7 +280,6 @@ function Websocket.accept_edit()
 
         if current_completion.edit_index > #current_completion.edits then
             current_completion = nil
-            print("we're done processing edits!")
             return
         end
 
@@ -294,9 +291,8 @@ function Websocket.accept_edit()
         end
 
         if edit.start == edit["end"] then
-            print("pure insert-edit")
+            --TODO
         else
-            print("replacement edit", edit.start, edit["end"])
             suggestion.showDeleteSuggestion(edit.start, edit["end"], edit.text)
             current_completion.edit_index = current_completion.edit_index + 1
         end
@@ -324,9 +320,8 @@ function Websocket.accept()
         current_completion.is_active = true
 
         if edit.start == edit["end"] then
-            print("pure insert-edit")
+            --TODO
         else
-            print("replacement edit", edit.start, edit["end"])
             suggestion.showDeleteSuggestion(edit.start, edit["end"], edit.text)
             current_completion.edit_index = current_completion.edit_index + 1
         end
@@ -581,9 +576,7 @@ function Websocket.setup_connection(server_uri)
                             end
 
                             if parsed.e then
-                                print(message)
                                 current_completion.edits = parsed.e
-                                print("len", #current_completion.edits)
                                 current_completion.edit_description = parsed.ed
                                 current_completion:close()
                             end
