@@ -291,7 +291,8 @@ function Websocket.accept_edit()
         end
 
         if edit.start == edit["end"] then
-            --TODO
+            suggestion.showInsertSuggestion(edit.start, edit["end"], edit.text)
+            current_completion.edit_index = current_completion.edit_index + 1
         else
             suggestion.showDeleteSuggestion(edit.start, edit["end"], edit.text)
             current_completion.edit_index = current_completion.edit_index + 1
@@ -320,7 +321,8 @@ function Websocket.accept()
         current_completion.is_active = true
 
         if edit.start == edit["end"] then
-            --TODO
+            suggestion.showInsertSuggestion(edit.start, edit["end"], edit.text)
+            current_completion.edit_index = current_completion.edit_index + 1
         else
             suggestion.showDeleteSuggestion(edit.start, edit["end"], edit.text)
             current_completion.edit_index = current_completion.edit_index + 1
