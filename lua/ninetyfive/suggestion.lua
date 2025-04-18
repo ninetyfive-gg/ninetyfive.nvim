@@ -26,33 +26,29 @@ end
 suggestion.showInsertSuggestion = function(start_pos, end_pos, message)
     local buf = vim.api.nvim_get_current_buf()
     local start_line, start_col = get_pos_from_index(buf, start_pos)
-    local end_line, end_col = get_pos_from_index(buf, end_pos)
 
     -- Clear previous highlights in the namespace
     vim.api.nvim_buf_clear_namespace(buf, ninetyfive_edit_ns, 0, -1)
 
-    -- Then overlay the message text on top of the range
+    -- Trim trailing newlines and split the message into lines
+    message = message:gsub("\n+$", "")
     local message_lines = vim.fn.split(message, "\n")
-    local num_lines = end_line - start_line + 1
 
-    -- Handle the case where message has more or fewer lines than the range
-    local lines_to_show = math.min(#message_lines, num_lines)
-
-    for i = 1, lines_to_show do
-        local line_text = message_lines[i]
-        local current_line = start_line + i - 1
-        local current_col = 0
-
-        -- For the first line, use start_col
-        if i == 1 then
-            current_col = start_col
+    -- Create virtual lines for the suggestion, filtering out empty lines
+    local virt_lines = {}
+    for _, line in ipairs(message_lines) do
+        if line ~= "" then
+            table.insert(virt_lines, { { line, "DiffAdd" } })
         end
+    end
 
-        -- Create an extmark for each line with overlay text
-        vim.api.nvim_buf_set_extmark(buf, ninetyfive_edit_ns, current_line, current_col, {
-            virt_text = { { line_text, "DiffAdd" } },
-            virt_text_pos = "overlay",
-            hl_mode = "replace",
+    -- Only create an extmark if there are non-empty lines to show
+    if #virt_lines > 0 then
+        -- Create an extmark with virtual lines that appear below the start position
+        vim.api.nvim_buf_set_extmark(buf, ninetyfive_edit_ns, start_line, start_col, {
+            virt_lines = virt_lines,
+            virt_lines_above = true,
+            hl_mode = "combine",
             ephemeral = false,
         })
     end
