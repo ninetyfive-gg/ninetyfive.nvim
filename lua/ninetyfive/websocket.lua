@@ -1,6 +1,6 @@
 local log = require("ninetyfive.util.log")
-local Queue = require("ninetyfive.queue")
 local suggestion = require("ninetyfive.suggestion")
+local completion = require("ninetyfive.completion")
 local git = require("ninetyfive.git")
 
 local Websocket = {}
@@ -11,11 +11,9 @@ local max_reconnect_attempts = 300
 local reconnect_delay = 1000
 
 -- Variable to store aggregated ghost text
-local completion = ""
+local current_completion = nil
 local buffer = nil
-local request_id = ""
-local completion_queue = Queue.New()
-
+local active_text = nil
 -- Function to send a message to the websocket
 function Websocket.send_message(message)
     -- Check if the global table exists
@@ -48,6 +46,29 @@ function Websocket.send_message(message)
 
     log.debug("websocket", "Sent message to websocket")
     return true
+end
+
+local function send_file_content()
+    local bufnr = vim.api.nvim_get_current_buf()
+    local bufname = vim.api.nvim_buf_get_name(bufnr)
+    local content = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
+
+    if git.is_ignored(bufname) then
+        log.debug("websocket", "skipping file-content message - file is git ignored")
+        return
+    end
+
+    local message = vim.json.encode({
+        type = "file-content",
+        path = bufname,
+        text = content,
+    })
+
+    log.debug("messages", "-> [file-content]", bufname)
+
+    if not Websocket.send_message(message) then
+        log.debug("websocket", "Failed to send file-content message")
+    end
 end
 
 local function set_workspace()
@@ -92,34 +113,16 @@ local function set_workspace()
         if not Websocket.send_message(empty_workspace) then
             log.debug("websocket", "Failed to empty set-workspace")
         end
+
+        local bufnr = vim.api.nvim_get_current_buf()
+        local curr_text = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
+        if active_text ~= curr_text then
+            active_text = curr_text
+            send_file_content()
+            current_completion = nil
+        end
     end
 end
-
-local function send_file_content(args)
-    local bufnr = args.buf
-    local bufname = vim.api.nvim_buf_get_name(bufnr)
-    local content = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
-
-    if git.is_ignored(bufname) then
-        log.debug("websocket", "skipping file-content message - file is git ignored")
-        return
-    end
-
-    local message = vim.json.encode({
-        type = "file-content",
-        path = bufname,
-        text = content,
-    })
-
-    log.debug("messages", "-> [file-content]", bufname)
-
-    if not Websocket.send_message(message) then
-        log.debug("websocket", "Failed to send file-content message")
-    end
-end
-
--- Store previous buffer content to calculate deltas
-local previous_content = {}
 
 -- Function to send file delta (changes only)
 local function send_file_delta(args)
@@ -135,12 +138,12 @@ local function send_file_delta(args)
     local current_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
     local current_content = table.concat(current_lines, "\n")
 
-    if not previous_content[bufnr] then
-        previous_content[bufnr] = current_content
+    if not active_text then
+        active_text = current_content
         return
     end
 
-    local prev = previous_content[bufnr]
+    local prev = active_text
     local curr = current_content
 
     -- Find the first differing character
@@ -189,11 +192,12 @@ local function send_file_delta(args)
     if not Websocket.send_message(message) then
         log.debug("websocket", "Failed to send file-delta message")
     end
-
-    previous_content[bufnr] = current_content
 end
 
 local function request_completion(args)
+    if current_completion ~= nil then
+        return
+    end
     local ok, err = pcall(function()
         -- Check that we're connected
         if
@@ -242,10 +246,7 @@ local function request_completion(args)
         end
 
         -- Generate a request ID
-        request_id = tostring(os.time()) .. "_" .. tostring(math.random(1000, 9999))
-
-        -- Clear the aggregated ghost text when sending a new completion request
-        completion = ""
+        local request_id = tostring(os.time()) .. "_" .. tostring(math.random(1000, 9999))
 
         buffer = bufnr
 
@@ -262,7 +263,7 @@ local function request_completion(args)
             log.debug("websocket", "Failed to send delta-completion-request message")
         end
 
-        Queue.clear(completion_queue)
+        current_completion = completion.new(request_id)
     end)
 
     if not ok then
@@ -273,23 +274,75 @@ local function request_completion(args)
     suggestion.clear()
 end
 
-function Websocket.accept()
-    if completion ~= "" and buffer == vim.api.nvim_get_current_buf() then
-        suggestion.accept()
+function Websocket.accept_edit()
+    if current_completion then
+        suggestion.accept_edit(current_completion)
 
-        local message = vim.json.encode({
-            type = "accept-completion",
-            completion = request_id,
-        })
-
-        log.debug("messages", "-> [accept-completion]", request_id)
-
-        if not Websocket.send_message(message) then
-            log.debug("websocket", "Failed to send accept-completion message")
+        if current_completion.edit_index > #current_completion.edits then
+            current_completion = nil
+            return
         end
 
-        completion = ""
-        request_id = ""
+        -- Check next edit
+        local edit = current_completion:next_edit()
+
+        if not edit then
+            return
+        end
+
+        if edit.start == edit["end"] then
+            suggestion.showInsertSuggestion(edit.start, edit["end"], edit.text)
+            current_completion.edit_index = current_completion.edit_index + 1
+        else
+            suggestion.showDeleteSuggestion(edit.start, edit["end"], edit.text)
+            current_completion.edit_index = current_completion.edit_index + 1
+        end
+    end
+end
+
+function Websocket.accept()
+    if
+        current_completion ~= nil
+        and current_completion.completion ~= ""
+        and buffer == vim.api.nvim_get_current_buf()
+    then
+        suggestion.accept()
+        current_completion:consume(string.len(current_completion.completion))
+
+        local edit = current_completion:next_edit()
+
+        -- Don't even show the edit description if there are no edits
+        if not edit then
+            return
+        end
+        -- After accepting we can process the edits
+        suggestion.showEditDescription(current_completion)
+
+        current_completion.is_active = true
+
+        if edit.start == edit["end"] then
+            suggestion.showInsertSuggestion(edit.start, edit["end"], edit.text)
+            current_completion.edit_index = current_completion.edit_index + 1
+        else
+            suggestion.showDeleteSuggestion(edit.start, edit["end"], edit.text)
+            current_completion.edit_index = current_completion.edit_index + 1
+        end
+
+        -- Notify completion accept
+        -- local message = vim.json.encode({
+        --     type = "accept-completion",
+        --     completion = current_completion.request_id,
+        -- })
+
+        -- log.debug("messages", "-> [accept-completion]", current_completion.request_id)
+
+        -- if not Websocket.send_message(message) then
+        --     log.debug("websocket", "Failed to send accept-completion message")
+        -- end
+
+        -- TODO we only clear the completion once its been consumed, or cancelled...
+        -- completion = ""
+        -- request_id = ""
     end
 end
 
@@ -331,17 +384,33 @@ function Websocket.setup_autocommands()
             suggestion.clear()
 
             vim.schedule(function()
-                if not previous_content[bufnr] then
+                local curr_text =
+                    table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
+                if active_text == nil then
                     log.debug("websocket", "No previous content, sending full file")
-                    send_file_content(args)
-
-                    local content =
-                        table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
-                    previous_content[bufnr] = content
+                    send_file_content()
+                    current_completion = nil
                 else
-                    send_file_delta(args)
+                    --TODO this should be a delta instead but there is something off
+                    send_file_content()
+
+                    if
+                        current_completion
+                        and current_completion.is_closed
+                        and current_completion.consumed
+                            == string.len(current_completion.completion)
+                    then
+                        -- we have consumed the completion we're not in edit mode
+                        if not current_completion.is_active then
+                            current_completion = nil
+                        end
+                        --TODO this is missing the edit case
+                    else
+                        current_completion = nil
+                    end
                 end
 
+                active_text = curr_text
                 request_completion(args)
             end)
         end,
@@ -369,12 +438,7 @@ function Websocket.setup_autocommands()
                 set_workspace()
 
                 -- Send full file content for initial buffer load
-                send_file_content(args)
-
-                -- To check if delta vs content
-                local bufnr = args.buf
-                local content = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
-                previous_content[bufnr] = content
+                send_file_content()
             end)
 
             if not ok then
@@ -497,40 +561,30 @@ function Websocket.setup_connection(server_uri)
                                 end
                             end
                         else
-                            if parsed.e ~= nil then
-                                -- print("we got an edit", parsed.ed)
-                                -- suggestion.showEditDescription(parsed.ed, parsed)
+                            if
+                                current_completion == nil
+                                or current_completion.request_id ~= parsed.r
+                            then
+                                return
                             end
 
-                            if parsed.v and parsed.r == request_id then
+                            if parsed.v ~= nil then
                                 log.debug("messages", "<- [completion-response]")
 
-                                if parsed.v == vim.NIL then
-                                    Queue.append(completion_queue, completion, true)
-                                else
-                                    completion = completion .. tostring(parsed.v)
-                                    if
-                                        Queue.length(completion_queue) == 0
-                                        and string.find(parsed.v, "\n")
-                                    then
-                                        local new_line_idx = completion:match(".*\n()") or -1
-
-                                        if new_line_idx == 1 then
-                                            return
-                                        end
-
-                                        local line = completion:sub(1, new_line_idx - 1)
-                                        Queue.append(completion_queue, line, false)
-                                        completion = string.sub(completion, 1, new_line_idx)
-                                    end
-                                end
-
-                                -- We could have a suggestion here, try to show it
-                                local current_completion = Queue.pop(completion_queue)
-                                if current_completion ~= nil then
-                                    suggestion.show(current_completion.completion)
+                                if parsed.v ~= vim.NIL then
+                                    current_completion.completion = current_completion.completion
+                                        .. tostring(parsed.v)
                                 end
                             end
+
+                            if parsed.e then
+                                current_completion.edits = parsed.e
+                                current_completion.edit_description = parsed.ed
+                                current_completion:close()
+                            end
+
+                            -- We still need to show stuff here
+                            suggestion.show(current_completion.completion)
                         end
                     end
                 end
@@ -591,11 +645,15 @@ function Websocket.setup_connection(server_uri)
 end
 
 function Websocket.get_completion()
-    return completion
+    if current_completion == nil then
+        return ""
+    end
+
+    return current_completion.completion
 end
 
 function Websocket.reset_completion()
-    completion = ""
+    current_completion = nil
 end
 
 return Websocket

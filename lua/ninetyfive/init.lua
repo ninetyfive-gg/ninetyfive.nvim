@@ -73,6 +73,10 @@ function Ninetyfive.accept()
     websocket.accept()
 end
 
+function Ninetyfive.accept_edit(edit)
+    websocket.accept_edit()
+end
+
 function Ninetyfive.reject()
     websocket.reject()
 end

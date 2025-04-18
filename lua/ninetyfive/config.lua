@@ -19,6 +19,7 @@ Ninetyfive.options = {
         enabled = true,
         -- Sets a global mapping to accept a suggestion
         accept = "<C-f>",
+        accept_edit = "<C-g>",
         -- Sets a global mapping to reject a suggestion
         reject = "<C-w>",
     },
@@ -63,9 +64,8 @@ local function register_mappings(options, mappings)
         end
 
         assert(type(options[name]) == "string", string.format("`%s` must be a string", name))
-        -- We set the keymap for insert mode!
-        -- Since we expose the :Ninetyfive<> commands, an user could still accept when not in insert mode?
-        vim.api.nvim_set_keymap("i", options[name], command, { noremap = true, silent = true })
+        -- We set the keymap for normal and insert mode!
+        vim.keymap.set({ "n", "i" }, options[name], command, { noremap = true, silent = true })
     end
 end
 
@@ -81,6 +81,7 @@ function Ninetyfive.setup(options)
 
     register_mappings(Ninetyfive.options.mappings, {
         accept = "<Esc>:NinetyfiveAccept<CR>",
+        accept_edit = "<Esc>:NinetyfiveAcceptEdit<CR>",
         reject = "<Esc>:NinetyfiveReject<CR>",
     })
 

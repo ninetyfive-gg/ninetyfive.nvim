@@ -17,6 +17,10 @@ else
         require("ninetyfive").accept()
     end, { desc = "Accepts a suggestion." })
 
+    vim.api.nvim_create_user_command("NinetyfiveAcceptEdit", function()
+        require("ninetyfive").accept_edit()
+    end, { desc = "Accepts an edit." })
+
     vim.api.nvim_create_user_command("NinetyfiveReject", function()
         require("ninetyfive").reject()
     end, { desc = "Rejects a suggestion." })
