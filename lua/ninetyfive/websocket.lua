@@ -15,16 +15,6 @@ local current_completion = nil
 local buffer = nil
 local active_text = nil
 
-local function generate_user_id()
-    local chars = "0123456789abcdefghijklmnopqrstuvwxyz"
-    local result = {}
-    for i = 1, 10 do
-        local rand = math.random(1, #chars)
-        table.insert(result, chars:sub(rand, rand))
-    end
-    return table.concat(result)
-end
-
 -- Function to send a message to the websocket
 function Websocket.send_message(message)
     -- Check if the global table exists
@@ -496,7 +486,7 @@ local function pick_binary()
 end
 
 -- Function to set up websocket connection
-function Websocket.setup_connection(server_uri)
+function Websocket.setup_connection(server_uri, user_id)
     log.debug("websocket", "Setting up websocket connection")
 
     -- Store the job ID for the websocket connection
@@ -515,11 +505,9 @@ function Websocket.setup_connection(server_uri)
     local binary_path = plugin_root .. pick_binary()
     log.debug("websocket", "Using binary at: " .. binary_path)
 
-    local new_user_id = generate_user_id()
-
     _G.Ninetyfive.websocket_job = vim.fn.jobstart({
         binary_path,
-        server_uri .. "?user_id=" .. new_user_id .. "&editor=neovim",
+        server_uri .. "?user_id=" .. user_id .. "&editor=neovim",
     }, {
         on_stdout = function(_, data, _)
             if data and #data > 0 then
@@ -631,7 +619,7 @@ function Websocket.setup_connection(server_uri)
 
                 vim.defer_fn(function()
                     log.debug("websocket", "Reconnecting to websocket...")
-                    Websocket.setup_connection(server_uri)
+                    Websocket.setup_connection(server_uri, user_id)
                 end, reconnect_delay)
             else
                 log.notify(

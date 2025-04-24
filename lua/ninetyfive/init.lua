@@ -3,8 +3,19 @@ local config = require("ninetyfive.config")
 local log = require("ninetyfive.util.log")
 local state = require("ninetyfive.state")
 local websocket = require("ninetyfive.websocket")
+math.randomseed(os.time())
 
 local Ninetyfive = {}
+
+local function generate_user_id()
+    local chars = "0123456789abcdefghijklmnopqrstuvwxyz"
+    local result = {}
+    for i = 1, 10 do
+        local rand = math.random(1, #chars)
+        table.insert(result, chars:sub(rand, rand))
+    end
+    return table.concat(result)
+end
 
 --- Toggle the plugin by calling the `enable`/`disable` methods respectively.
 function Ninetyfive.toggle()
@@ -22,7 +33,8 @@ function Ninetyfive.toggle()
         local server = _G.Ninetyfive.config.server
         log.debug("toggle", "Setting up autocommands and websocket after toggle")
         websocket.setup_autocommands()
-        websocket.setup_connection(server)
+        local user_id = generate_user_id()
+        websocket.setup_connection(server, user_id)
     end
 end
 
@@ -37,8 +49,9 @@ function Ninetyfive.enable(scope)
     -- Set up autocommands when plugin is enabled
     websocket.setup_autocommands()
 
+    local user_id = generate_user_id()
     -- Set up websocket connection
-    websocket.setup_connection(server)
+    websocket.setup_connection(server, user_id)
 
     main.toggle(scope or "public_api_enable")
 end
@@ -53,12 +66,13 @@ function Ninetyfive.setup(opts)
     _G.Ninetyfive.config = config.setup(opts)
 
     if _G.Ninetyfive.config.enable_on_startup then
+        local user_id = generate_user_id()
         -- Set up autocommands when plugin is enabled
         websocket.setup_autocommands()
 
         local server = _G.Ninetyfive.config.server
         -- Set up websocket connection
-        websocket.setup_connection(server)
+        websocket.setup_connection(server, user_id)
     end
 end
 
