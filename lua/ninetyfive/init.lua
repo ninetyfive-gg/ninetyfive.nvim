@@ -17,6 +17,32 @@ local function generate_user_id()
     return table.concat(result)
 end
 
+local function get_or_create_user_id()
+    local data_dir = vim.fn.stdpath("data")
+    local ninetyfive_dir = data_dir .. "/ninetyfive"
+    local user_data_file = ninetyfive_dir .. "/user_data.json" -- use a json file in case we need to store more stuff later
+
+    if vim.fn.isdirectory(ninetyfive_dir) == 0 then
+        vim.fn.mkdir(ninetyfive_dir, "p")
+    end
+
+    local user_data = {}
+
+    if vim.fn.filereadable(user_data_file) == 1 then
+        local content = table.concat(vim.fn.readfile(user_data_file), "\n")
+        local ok, data = pcall(vim.json.decode, content)
+        if ok and data and data.user_id then
+            return data.user_id
+        end
+    end
+
+    user_data.user_id = generate_user_id()
+    local json_str = vim.json.encode(user_data)
+    vim.fn.writefile({ json_str }, user_data_file)
+
+    return user_data.user_id
+end
+
 --- Toggle the plugin by calling the `enable`/`disable` methods respectively.
 function Ninetyfive.toggle()
     if _G.Ninetyfive.config == nil then
@@ -33,7 +59,7 @@ function Ninetyfive.toggle()
         local server = _G.Ninetyfive.config.server
         log.debug("toggle", "Setting up autocommands and websocket after toggle")
         websocket.setup_autocommands()
-        local user_id = generate_user_id()
+        local user_id = get_or_create_user_id()
         websocket.setup_connection(server, user_id)
     end
 end
@@ -49,7 +75,7 @@ function Ninetyfive.enable(scope)
     -- Set up autocommands when plugin is enabled
     websocket.setup_autocommands()
 
-    local user_id = generate_user_id()
+    local user_id = get_or_create_user_id()
     -- Set up websocket connection
     websocket.setup_connection(server, user_id)
 
@@ -66,7 +92,7 @@ function Ninetyfive.setup(opts)
     _G.Ninetyfive.config = config.setup(opts)
 
     if _G.Ninetyfive.config.enable_on_startup then
-        local user_id = generate_user_id()
+        local user_id = get_or_create_user_id()
         -- Set up autocommands when plugin is enabled
         websocket.setup_autocommands()
 
