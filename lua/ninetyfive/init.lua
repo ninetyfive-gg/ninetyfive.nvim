@@ -17,7 +17,7 @@ local function generate_user_id()
     return table.concat(result)
 end
 
-local function get_or_create_user_id()
+local function get_user_data()
     local data_dir = vim.fn.stdpath("data")
     local ninetyfive_dir = data_dir .. "/ninetyfive"
     local user_data_file = ninetyfive_dir .. "/user_data.json" -- use a json file in case we need to store more stuff later
@@ -31,16 +31,18 @@ local function get_or_create_user_id()
     if vim.fn.filereadable(user_data_file) == 1 then
         local content = table.concat(vim.fn.readfile(user_data_file), "\n")
         local ok, data = pcall(vim.json.decode, content)
-        if ok and data and data.user_id then
-            return data.user_id
+        if ok and data then
+            user_data = data
         end
     end
 
-    user_data.user_id = generate_user_id()
-    local json_str = vim.json.encode(user_data)
-    vim.fn.writefile({ json_str }, user_data_file)
+    if not user_data.user_id then
+        user_data.user_id = generate_user_id()
+        local json_str = vim.json.encode(user_data)
+        vim.fn.writefile({ json_str }, user_data_file)
+    end
 
-    return user_data.user_id
+    return user_data
 end
 
 --- Toggle the plugin by calling the `enable`/`disable` methods respectively.
@@ -59,8 +61,8 @@ function Ninetyfive.toggle()
         local server = _G.Ninetyfive.config.server
         log.debug("toggle", "Setting up autocommands and websocket after toggle")
         websocket.setup_autocommands()
-        local user_id = get_or_create_user_id()
-        websocket.setup_connection(server, user_id)
+        local user_data = get_user_data()
+        websocket.setup_connection(server, user_data.user_id, user_data.api_key)
     end
 end
 
@@ -75,9 +77,9 @@ function Ninetyfive.enable(scope)
     -- Set up autocommands when plugin is enabled
     websocket.setup_autocommands()
 
-    local user_id = get_or_create_user_id()
+    local user_data = get_user_data()
     -- Set up websocket connection
-    websocket.setup_connection(server, user_id)
+    websocket.setup_connection(server, user_data.user_id, user_data.api_key)
 
     main.toggle(scope or "public_api_enable")
 end
@@ -92,13 +94,13 @@ function Ninetyfive.setup(opts)
     _G.Ninetyfive.config = config.setup(opts)
 
     if _G.Ninetyfive.config.enable_on_startup then
-        local user_id = get_or_create_user_id()
+        local user_data = get_user_data()
         -- Set up autocommands when plugin is enabled
         websocket.setup_autocommands()
 
         local server = _G.Ninetyfive.config.server
         -- Set up websocket connection
-        websocket.setup_connection(server, user_id)
+        websocket.setup_connection(server, user_data.user_id, user_data.api_key)
     end
 end
 
@@ -106,7 +108,38 @@ end
 ---
 ---@param api_key string: the api key you want to use.
 function Ninetyfive.setApiKey(api_key)
-    log.debug("init.lua", "Set api key called!!!!")
+    log.debug("init.lua", "Setting API key")
+
+    local data_dir = vim.fn.stdpath("data")
+    local ninetyfive_dir = data_dir .. "/ninetyfive"
+    local user_data_file = ninetyfive_dir .. "/user_data.json"
+
+    if vim.fn.isdirectory(ninetyfive_dir) == 0 then
+        vim.fn.mkdir(ninetyfive_dir, "p")
+    end
+
+    local user_data = {}
+
+    if vim.fn.filereadable(user_data_file) == 1 then
+        local content = table.concat(vim.fn.readfile(user_data_file), "\n")
+        local ok, data = pcall(vim.json.decode, content)
+        if ok and data then
+            user_data = data
+        end
+    end
+
+    user_data.api_key = api_key
+
+    -- Write to the file
+    local json_str = vim.json.encode(user_data)
+    vim.fn.writefile({ json_str }, user_data_file)
+
+    -- We probably want to reconnect
+    if _G.Ninetyfive and _G.Ninetyfive.websocket_job and _G.Ninetyfive.websocket_job > 0 then
+        local server = _G.Ninetyfive.config.server
+        local user_data = get_user_data()
+        websocket.setup_connection(server, user_data.user_id, user_data.api_key)
+    end
 end
 
 function Ninetyfive.accept()

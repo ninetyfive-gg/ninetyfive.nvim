@@ -26,6 +26,12 @@ else
     end, { desc = "Rejects a suggestion." })
 
     vim.api.nvim_create_user_command("NinetyfiveKey", function()
-        require("ninetyfive").setApiKey("myFakeApiKey")
+        local api_key = vim.fn.input("Enter API Key: ")
+        if api_key and api_key ~= "" then
+            require("ninetyfive").setApiKey(api_key)
+            vim.notify("API key has been set", vim.log.levels.INFO)
+        else
+            vim.notify("API key not set (empty input)", vim.log.levels.WARN)
+        end
     end, { desc = "Sets the API Key." })
 end

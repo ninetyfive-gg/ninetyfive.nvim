@@ -492,7 +492,7 @@ local function pick_binary()
 end
 
 -- Function to set up websocket connection
-function Websocket.setup_connection(server_uri, user_id)
+function Websocket.setup_connection(server_uri, user_id, api_key)
     log.debug("websocket", "Setting up websocket connection")
 
     -- Store the job ID for the websocket connection
@@ -511,9 +511,16 @@ function Websocket.setup_connection(server_uri, user_id)
     local binary_path = plugin_root .. pick_binary()
     log.debug("websocket", "Using binary at: " .. binary_path)
 
+    -- Build the websocket URI with query parameters
+    local ws_uri = server_uri .. "?user_id=" .. user_id .. "&editor=neovim"
+
+    if api_key and api_key ~= "" then
+        ws_uri = ws_uri .. "&api_key=" .. api_key
+    end
+
     _G.Ninetyfive.websocket_job = vim.fn.jobstart({
         binary_path,
-        server_uri .. "?user_id=" .. user_id .. "&editor=neovim",
+        ws_uri,
     }, {
         on_stdout = function(_, data, _)
             if data and #data > 0 then
@@ -523,6 +530,7 @@ function Websocket.setup_connection(server_uri, user_id)
                     if ok and parsed then
                         if parsed.type then
                             if parsed.type == "subscription-info" then
+                                print(parsed.name)
                                 log.debug("messages", "<- [subscription-info]", parsed)
                             elseif parsed.type == "get-commit" then
                                 log.debug("messages", "<- [get-commit]")
@@ -625,7 +633,7 @@ function Websocket.setup_connection(server_uri, user_id)
 
                 vim.defer_fn(function()
                     log.debug("websocket", "Reconnecting to websocket...")
-                    Websocket.setup_connection(server_uri, user_id)
+                    Websocket.setup_connection(server_uri, user_id, api_key)
                 end, reconnect_delay)
             else
                 log.notify(
