@@ -61,7 +61,7 @@ suggestion.showDeleteSuggestion = function(edit)
 
     -- Clear previous highlights in the namespace
     vim.api.nvim_buf_clear_namespace(buf, ninetyfive_edit_ns, 0, -1)
-    
+
     -- Create a custom highlight group with red background for deletion
     vim.cmd([[
         highlight NinetyfiveDelete guibg=#ff5555 guifg=white ctermbg=red ctermfg=white
@@ -70,22 +70,51 @@ suggestion.showDeleteSuggestion = function(edit)
     -- Highlight the region to be deleted with red background
     if start_line == end_line then
         -- Single line deletion
-        vim.api.nvim_buf_add_highlight(buf, ninetyfive_edit_ns, "NinetyfiveDelete", start_line, start_col, end_col)
+        vim.api.nvim_buf_add_highlight(
+            buf,
+            ninetyfive_edit_ns,
+            "NinetyfiveDelete",
+            start_line,
+            start_col,
+            end_col
+        )
     else
         -- Multi-line deletion
         -- Highlight first line from start_col to end
-        local first_line_text = vim.api.nvim_buf_get_lines(buf, start_line, start_line + 1, false)[1] or ""
-        vim.api.nvim_buf_add_highlight(buf, ninetyfive_edit_ns, "NinetyfiveDelete", start_line, start_col, #first_line_text)
-        
+        local first_line_text = vim.api.nvim_buf_get_lines(buf, start_line, start_line + 1, false)[1]
+            or ""
+        vim.api.nvim_buf_add_highlight(
+            buf,
+            ninetyfive_edit_ns,
+            "NinetyfiveDelete",
+            start_line,
+            start_col,
+            #first_line_text
+        )
+
         -- Highlight middle lines completely
         for line = start_line + 1, end_line - 1 do
             local line_text = vim.api.nvim_buf_get_lines(buf, line, line + 1, false)[1] or ""
-            vim.api.nvim_buf_add_highlight(buf, ninetyfive_edit_ns, "NinetyfiveDelete", line, 0, #line_text)
+            vim.api.nvim_buf_add_highlight(
+                buf,
+                ninetyfive_edit_ns,
+                "NinetyfiveDelete",
+                line,
+                0,
+                #line_text
+            )
         end
-        
+
         -- Highlight last line from start to end_col
         if start_line < end_line then
-            vim.api.nvim_buf_add_highlight(buf, ninetyfive_edit_ns, "NinetyfiveDelete", end_line, 0, end_col)
+            vim.api.nvim_buf_add_highlight(
+                buf,
+                ninetyfive_edit_ns,
+                "NinetyfiveDelete",
+                end_line,
+                0,
+                end_col
+            )
         end
     end
 end
