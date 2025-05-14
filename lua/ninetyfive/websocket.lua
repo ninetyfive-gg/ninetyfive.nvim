@@ -530,7 +530,6 @@ function Websocket.setup_connection(server_uri, user_id, api_key)
                     if ok and parsed then
                         if parsed.type then
                             if parsed.type == "subscription-info" then
-                                print(parsed.name)
                                 log.debug("messages", "<- [subscription-info]", parsed)
                             elseif parsed.type == "get-commit" then
                                 log.debug("messages", "<- [get-commit]")
