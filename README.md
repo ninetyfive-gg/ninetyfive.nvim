@@ -91,6 +91,7 @@ EOF
 
 ## Commands
 
-| Command       | Description         |
-| ------------- | ------------------- |
-| `:Ninetyfive` | Enables the plugin. |
+| Command          | Description         |
+| ---------------- | ------------------- |
+| `:Ninetyfive`    | Enables the plugin. |
+| `:NinetyfiveKey` | Provide an API key  |
