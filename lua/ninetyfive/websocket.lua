@@ -453,6 +453,13 @@ function Websocket.setup_autocommands()
             end
         end,
     })
+
+    vim.api.nvim_create_autocmd("InsertLeave", {
+        callback = function()
+            -- We dont need to display suggestions when the user leaves insert mode
+            suggestion.clear()
+        end,
+    })
 end
 
 -- See: https://github.com/neovim/neovim/blob/master/test/testutil.lua#L390
