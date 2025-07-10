@@ -80,9 +80,9 @@ function Ninetyfive.setup(options)
     log.warn_deprecation(Ninetyfive.options)
 
     register_mappings(Ninetyfive.options.mappings, {
-        accept = "<Esc>:NinetyfiveAccept<CR>",
-        accept_edit = "<Esc>:NinetyfiveAcceptEdit<CR>",
-        reject = "<Esc>:NinetyfiveReject<CR>",
+        accept = "<Cmd>NinetyfiveAccept<CR>",
+        accept_edit = "<Cmd>NinetyfiveAcceptEdit<CR>",
+        reject = "<Cmd>NinetyfiveReject<CR>",
     })
 
     return Ninetyfive.options
