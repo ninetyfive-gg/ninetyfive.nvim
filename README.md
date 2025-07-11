@@ -1,5 +1,7 @@
 # ninetyfive.nvim
 
+> Repo based on [shortcut's boilerplate](https://github.com/shortcuts/neovim-plugin-boilerplate)
+
 Very fast autocomplete
 
 </div>
