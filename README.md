@@ -96,3 +96,13 @@ EOF
 | `:Ninetyfive`         | Enables the plugin.            |
 | `:NinetyfivePurchase` | Redirects to the purchase page |
 | `:NinetyfiveKey`      | Provide an API key             |
+
+## Development
+
+```bash
+# remove old version
+rm -rf ~/.config/nvim/pack/vendor/start/ninetyfive.nvim/
+
+# copy new version
+cp -r <development-directory>/ninetyfive.nvim/ ~/.config/nvim/pack/vendor/start/ninetyfive.nvim/
+```
