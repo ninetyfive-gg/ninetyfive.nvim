@@ -1,11 +1,11 @@
-local log = require("ninetyfive.util.log")
-
 local suggestion = {}
 local ninetyfive_ns = vim.api.nvim_create_namespace("ninetyfive_ghost_ns")
 local ninetyfive_edit_ns = vim.api.nvim_create_namespace("ninetyfive_edit_ns")
 local ninetyfive_hint_ns = vim.api.nvim_create_namespace("ninetyfive_hint_ns")
 
 local completion_id = ""
+
+local log = require("ninetyfive.util.log")
 
 local function get_pos_from_index(buf, index)
     local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, true)
@@ -273,7 +273,7 @@ suggestion.accept = function()
                 extmark_text = extmark_text .. part[1]
             end
         end
-
+        
         -- Add the rest of the lines from virt_lines
         if details.virt_lines then
             for _, virt_line in ipairs(details.virt_lines) do
@@ -309,21 +309,18 @@ suggestion.accept = function()
                 for i = 2, #lines do
                     table.insert(new_lines, lines[i])
                 end
+
                 vim.api.nvim_buf_set_lines(bufnr, line + 1, line + 1, false, new_lines)
                 new_line = line + #lines - 1
                 new_col = #lines[#lines]
             end
         else
-            -- No newlines, just insert the text
             vim.api.nvim_buf_set_text(bufnr, line, col, line, col, { extmark_text })
             new_col = col + #extmark_text
         end
 
         -- Move cursor to the end of inserted text
         vim.api.nvim_win_set_cursor(0, { new_line + 1, new_col })
-
-        -- Switch back to insert mode
-        vim.cmd("startinsert!")
 
         completion_id = ""
     end

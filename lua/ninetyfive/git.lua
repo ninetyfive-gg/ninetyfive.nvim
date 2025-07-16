@@ -100,7 +100,7 @@ function git.get_commit(hash)
     local diff = parse_diff_numstat(diff_stdout)
 
     local commit_info =
-    run_git_command(string.format("git log -1 --pretty=format:%%P%%n%%B %s", hash))
+        run_git_command(string.format("git log -1 --pretty=format:%%P%%n%%B %s", hash))
     if not commit_info then
         return nil
     end

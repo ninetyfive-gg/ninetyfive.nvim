@@ -1,4 +1,5 @@
 local log = require("ninetyfive.util.log")
+local websocket = require("ninetyfive.websocket")
 
 local Ninetyfive = {}
 
@@ -52,20 +53,33 @@ end
 ---
 ---@private
 local function register_mappings(options, mappings)
-    -- all of the mappings are disabled
     if not options.enabled then
         return
     end
 
     for name, command in pairs(mappings) do
-        -- this specific mapping is disabled
         if not options[name] then
             return
         end
 
         assert(type(options[name]) == "string", string.format("`%s` must be a string", name))
-        -- We set the keymap for normal and insert mode!
-        vim.keymap.set({ "n", "i" }, options[name], command, { noremap = true, silent = true })
+
+        local key = options[name]
+        local opts = { noremap = true, silent = true }
+
+        -- conditional tab behavior, ensure we don't completely hijack the tab key.
+        if name == "accept" then
+            opts.expr = true
+            vim.keymap.set("i", key, function()
+                if websocket.has_active and websocket.has_active() then
+                    return "<Cmd>NinetyfiveAccept<CR>"
+                else
+                    return vim.fn.pumvisible() == 1 and "<C-n>" or "<Tab>"
+                end
+            end, opts)
+        else
+            vim.keymap.set({ "n", "i" }, key, command, opts)
+        end
     end
 end
 

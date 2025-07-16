@@ -15,6 +15,17 @@ local current_completion = nil
 local buffer = nil
 local active_text = nil
 
+function Websocket.has_active()
+    return current_completion ~= nil
+        and current_completion.completion ~= ""
+        -- ensure that the completion is not just whitespace
+        and current_completion.completion:match("%S") ~= nil
+end
+
+function Websocket.clear()
+    current_completion = nil
+end
+
 -- Function to send a message to the websocket
 function Websocket.send_message(message)
     -- Check if the global table exists
@@ -35,17 +46,17 @@ function Websocket.send_message(message)
 
     -- Handle any errors that occurred
     if not ok then
-        log.debug("websocket", "Error sending message: " .. tostring(result))
+        -- log.debug("websocket", "Error sending message: " .. tostring(result))
         return false
     end
 
     -- Check if the send was successful
     if result == 0 then
-        log.debug("websocket", "Failed to send message to websocket")
+        -- log.debug("websocket", "Failed to send message to websocket")
         return false
     end
 
-    log.debug("websocket", "Sent message to websocket")
+    -- log.debug("websocket", "Sent message to websocket")
     return true
 end
 
@@ -65,8 +76,6 @@ local function send_file_content()
         text = content,
     })
 
-    log.debug("messages", "-> [file-content]", bufname)
-
     if not Websocket.send_message(message) then
         log.debug("websocket", "Failed to send file-content message")
     end
@@ -75,6 +84,7 @@ end
 local function set_workspace()
     local head = git.get_head()
     local git_root = git.get_repo_root()
+    
     local repo = "unknown"
     if git_root then
         local repo_match = string.match(git_root, "/([^/]+)$")
@@ -98,8 +108,6 @@ local function set_workspace()
             features = { "edits" },
         })
 
-        log.debug("messages", "-> [set-workspace]", set_workspace)
-
         if not Websocket.send_message(set_workspace) then
             log.debug("websocket", "Failed to set-workspace")
         end
@@ -109,14 +117,13 @@ local function set_workspace()
             features = { "edits" },
         })
 
-        log.debug("messages", "-> [set-workspace] empty")
-
         if not Websocket.send_message(empty_workspace) then
             log.debug("websocket", "Failed to empty set-workspace")
         end
 
         local bufnr = vim.api.nvim_get_current_buf()
         local curr_text = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
+
         if active_text ~= curr_text then
             active_text = curr_text
             send_file_content()
@@ -138,11 +145,6 @@ local function send_file_delta(args)
     -- Get current content
     local current_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
     local current_content = table.concat(current_lines, "\n")
-
-    if not active_text then
-        active_text = current_content
-        return
-    end
 
     local prev = active_text
     local curr = current_content
@@ -177,6 +179,10 @@ local function send_file_delta(args)
     local replaced_text = string.sub(prev, start_pos + 1, prev_end)
     local new_text = string.sub(curr, start_pos + 1, curr_end)
 
+    if (new_text == "") then
+        return
+     end
+
     -- Calculate end position
     local end_pos = start_pos + #replaced_text
 
@@ -188,8 +194,6 @@ local function send_file_delta(args)
         ["end"] = end_pos,
     })
 
-    log.debug("messages", "-> [file-delta]", bufname, start_pos, end_pos)
-
     if not Websocket.send_message(message) then
         log.debug("websocket", "Failed to send file-delta message")
     end
@@ -199,6 +203,7 @@ local function request_completion(args)
     if current_completion ~= nil then
         return
     end
+
     local ok, err = pcall(function()
         -- Check that we're connected
         if
@@ -311,6 +316,7 @@ function Websocket.accept()
         and buffer == vim.api.nvim_get_current_buf()
     then
         suggestion.accept()
+
         current_completion:consume(string.len(current_completion.completion))
 
         local edit = current_completion:next_edit()
@@ -321,6 +327,8 @@ function Websocket.accept()
         end
         -- After accepting we can process the edits
         suggestion.showEditDescription(current_completion)
+
+        log.debug("messages", "checking if active")
 
         current_completion.is_active = true
 
@@ -341,10 +349,10 @@ function Websocket.accept()
         --     completion = current_completion.request_id,
         -- })
 
-        -- log.debug("messages", "-> [accept-completion]", current_completion.request_id)
+        -- -- log.debug("messages", "-> [accept-completion]", current_completion.request_id)
 
         -- if not Websocket.send_message(message) then
-        --     log.debug("websocket", "Failed to send accept-completion message")
+        --     -- log.debug("websocket", "Failed to send accept-completion message")
         -- end
 
         -- TODO we only clear the completion once its been consumed, or cancelled...
@@ -370,13 +378,8 @@ function Websocket.setup_autocommands()
         pattern = "*",
         group = ninetyfive_augroup,
         callback = function(args)
-            log.debug("autocmd", "CursorMovedI")
-
             suggestion.clear()
-
-            vim.schedule(function()
-                request_completion(args)
-            end)
+            current_completion = nil
         end,
     })
 
@@ -384,21 +387,18 @@ function Websocket.setup_autocommands()
         pattern = "*",
         group = ninetyfive_augroup,
         callback = function(args)
-            log.debug("autocmd", "TextChangedI")
-
             local bufnr = args.buf
-
+            
             suggestion.clear()
+            current_completion = nil
 
             vim.schedule(function()
                 local curr_text =
                     table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
                 if active_text == nil then
-                    log.debug("websocket", "No previous content, sending full file")
                     send_file_content()
                     current_completion = nil
                 else
-                    --TODO this should be a delta instead but there is something off
                     send_file_content()
 
                     if
@@ -418,6 +418,7 @@ function Websocket.setup_autocommands()
                 end
 
                 active_text = curr_text
+
                 request_completion(args)
             end)
         end,
@@ -458,6 +459,7 @@ function Websocket.setup_autocommands()
         callback = function()
             -- We dont need to display suggestions when the user leaves insert mode
             suggestion.clear()
+            current_completion = nil
         end,
     })
 end
@@ -516,7 +518,6 @@ function Websocket.setup_connection(server_uri, user_id, api_key)
         ":h:h:h"
     )
     local binary_path = plugin_root .. pick_binary()
-    log.debug("websocket", "Using binary at: " .. binary_path)
 
     -- Build the websocket URI with query parameters
     local ws_uri = server_uri .. "?user_id=" .. user_id .. "&editor=neovim"
@@ -539,7 +540,6 @@ function Websocket.setup_connection(server_uri, user_id, api_key)
                             if parsed.type == "subscription-info" then
                                 log.debug("messages", "<- [subscription-info]", parsed)
                             elseif parsed.type == "get-commit" then
-                                log.debug("messages", "<- [get-commit]")
                                 local commit = git.get_commit(parsed.commitHash)
 
                                 if not commit then
@@ -552,14 +552,10 @@ function Websocket.setup_connection(server_uri, user_id, api_key)
                                     commit = commit,
                                 })
 
-                                log.debug("messages", "-> [commit]", send_commit)
-
                                 if not Websocket.send_message(send_commit) then
                                     log.debug("websocket", "Failed to send commit")
                                 end
                             elseif parsed.type == "get-blob" then
-                                log.debug("messages", "<- [get-blob]")
-
                                 local blob = git.get_blob(parsed.commitHash, parsed.path)
 
                                 if not blob then
@@ -588,10 +584,7 @@ function Websocket.setup_connection(server_uri, user_id, api_key)
                             then
                                 return
                             end
-
                             if parsed.v ~= nil then
-                                log.debug("messages", "<- [completion-response]")
-
                                 if parsed.v ~= vim.NIL then
                                     current_completion.completion = current_completion.completion
                                         .. tostring(parsed.v)
@@ -625,17 +618,6 @@ function Websocket.setup_connection(server_uri, user_id, api_key)
             -- Attempt to reconnect if not shutting down intentionally
             if reconnect_attempts < max_reconnect_attempts then
                 reconnect_attempts = reconnect_attempts + 1
-
-                log.debug(
-                    "websocket",
-                    "Attempting to reconnect in "
-                        .. reconnect_delay
-                        .. "ms (attempt "
-                        .. reconnect_attempts
-                        .. "/"
-                        .. max_reconnect_attempts
-                        .. ")"
-                )
 
                 vim.defer_fn(function()
                     log.debug("websocket", "Reconnecting to websocket...")
