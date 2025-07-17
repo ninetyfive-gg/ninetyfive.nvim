@@ -39,16 +39,16 @@ function log.notify(scope, level, verbose, str, ...)
 
     local formatted_message
     local has_args = select(1, ...) ~= nil
-    
+
     if has_args and string.find(str, "%%") then
         -- If str contains format specifiers and we have args, use string.format
         formatted_message = string.format(str, ...)
     elseif has_args then
         -- If str doesn't have format specifiers but we have args, concatenate them
         formatted_message = str
-        
+
         -- Convert each argument to string and concatenate
-        local args = {...}
+        local args = { ... }
         for i, arg in ipairs(args) do
             if type(arg) == "table" then
                 formatted_message = formatted_message .. " " .. vim.inspect(arg)
@@ -60,7 +60,7 @@ function log.notify(scope, level, verbose, str, ...)
         -- If no args, just use str as is
         formatted_message = str
     end
-    
+
     vim.notify(
         string.format("[ninetyfive.nvim@%s] %s", scope, formatted_message),
         level,
