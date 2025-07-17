@@ -291,11 +291,8 @@ suggestion.accept = function()
         local new_line, new_col = line, col
 
         if string.find(extmark_text, "\n") then
-            -- Split the ghost text by newlines
-            local lines = {}
-            for s in string.gmatch(extmark_text, "[^\n]+") do
-                table.insert(lines, s)
-            end
+            -- preserves whitespace characters; before, we were removing them
+            local lines = vim.split(extmark_text, "\n", { plain = true, trimempty = false })
 
             -- Insert the first line at the cursor position
             if #lines > 0 then
@@ -315,7 +312,17 @@ suggestion.accept = function()
                 new_col = #lines[#lines]
             end
         else
-            vim.api.nvim_buf_set_text(bufnr, line, col, line, col, { extmark_text })
+            local line_text = vim.api.nvim_buf_get_lines(bufnr, line, line + 1, false)[1] or ""
+            local virt_width = 0
+            if details.virt_text then
+                for _, part in ipairs(details.virt_text) do
+                    virt_width = virt_width + vim.fn.strdisplaywidth(part[1])
+                end
+            end
+
+            local end_col = math.min(#line_text, col + virt_width)
+
+            vim.api.nvim_buf_set_text(bufnr, line, col, line, end_col, { extmark_text })
             new_col = col + #extmark_text
         end
 
