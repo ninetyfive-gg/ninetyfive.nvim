@@ -531,77 +531,69 @@ function Websocket.setup_connection(server_uri, user_id, api_key)
         ws_uri,
     }, {
         on_stdout = function(_, data, _)
-            if data and #data > 0 then
-                local message = table.concat(data, "\n")
-                if message ~= "" then
-                    local ok, parsed = pcall(vim.json.decode, message)
-                    if ok and parsed then
-                        if parsed.type then
-                            if parsed.type == "subscription-info" then
-                                log.debug("messages", "<- [subscription-info]", parsed)
-                            elseif parsed.type == "get-commit" then
-                                local commit = git.get_commit(parsed.commitHash)
+            if not data then return end
 
-                                if not commit then
-                                    return
-                                end
+            for _, line in ipairs(data) do
+                if line ~= "" then
+                    log.debug("websocket", "Got message line from websocket: ", line)
 
-                                local send_commit = vim.json.encode({
-                                    type = "commit",
-                                    commitHash = parsed.commitHash,
-                                    commit = commit,
-                                })
+                    local ok, parsed = pcall(vim.json.decode, line)
+                    if not ok or type(parsed) ~= "table" then
+                        log.debug("websocket", "Failed to parse JSON line: ", line)
+                        goto continue
+                    end
 
-                                if not Websocket.send_message(send_commit) then
-                                    log.debug("websocket", "Failed to send commit")
-                                end
-                            elseif parsed.type == "get-blob" then
-                                local blob = git.get_blob(parsed.commitHash, parsed.path)
+                    local msg_type = parsed.type
 
-                                if not blob then
-                                    return
-                                end
+                    if msg_type == "subscription-info" then
+                        log.debug("messages", "<- [subscription-info]", parsed)
 
-                                local send_blob = vim.json.encode({
-                                    type = "blob",
-                                    commitHash = parsed.commitHash,
-                                    objectHash = parsed.objectHash,
-                                    path = parsed.path,
-                                    blobBytes = blob.blob,
-                                    diffBytes = blob.diff,
-                                })
-
-                                log.debug("messages", "-> [blob]", send_blob)
-
-                                if not Websocket.send_message(send_blob) then
-                                    log.debug("websocket", "Failed to send blob")
-                                end
+                    elseif msg_type == "get-commit" then
+                        local commit = git.get_commit(parsed.commitHash)
+                        if commit then
+                            local send_commit = vim.json.encode({
+                                type = "commit",
+                                commitHash = parsed.commitHash,
+                                commit = commit,
+                            })
+                            if not Websocket.send_message(send_commit) then
+                                log.debug("websocket", "Failed to send commit")
                             end
-                        else
-                            if
-                                current_completion == nil
-                                or current_completion.request_id ~= parsed.r
-                            then
-                                return
-                            end
-                            if parsed.v ~= nil then
-                                if parsed.v ~= vim.NIL then
-                                    current_completion.completion = current_completion.completion
-                                        .. tostring(parsed.v)
-                                end
-                            end
+                        end
 
+                    elseif msg_type == "get-blob" then
+                        local blob = git.get_blob(parsed.commitHash, parsed.path)
+                        if blob then
+                            local send_blob = vim.json.encode({
+                                type = "blob",
+                                commitHash = parsed.commitHash,
+                                objectHash = parsed.objectHash,
+                                path = parsed.path,
+                                blobBytes = blob.blob,
+                                diffBytes = blob.diff,
+                            })
+                            log.debug("messages", "-> [blob]", send_blob)
+                            if not Websocket.send_message(send_blob) then
+                                log.debug("websocket", "Failed to send blob")
+                            end
+                        end
+
+                    else
+                        local c = current_completion
+                        if c and c.request_id == parsed.r then
+                            if parsed.v and parsed.v ~= vim.NIL then
+                                c.completion = c.completion .. tostring(parsed.v)
+                            end
                             if parsed.e then
-                                current_completion.edits = parsed.e
-                                current_completion.edit_description = parsed.ed
-                                current_completion:close()
+                                c.edits = parsed.e
+                                c.edit_description = parsed.ed
+                                c:close()
                             end
-
-                            -- We still need to show stuff here
-                            suggestion.show(current_completion.completion)
+                            suggestion.show(c.completion)
                         end
                     end
                 end
+                ::continue::
             end
         end,
         on_stderr = function(_, data, _)
