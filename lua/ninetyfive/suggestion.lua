@@ -200,6 +200,8 @@ suggestion.show = function(message)
     vim.api.nvim_buf_clear_namespace(bufnr, ninetyfive_ns, 0, -1)
 
     local virt_lines = {}
+
+    -- ensure that the message is split into lines, even if the message is just "\n"
     for _, l in ipairs(vim.fn.split(message, "\n", true)) do
         table.insert(virt_lines, { { l, "Comment" } })
     end
