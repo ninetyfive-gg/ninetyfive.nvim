@@ -200,7 +200,7 @@ suggestion.show = function(message)
     vim.api.nvim_buf_clear_namespace(bufnr, ninetyfive_ns, 0, -1)
 
     local virt_lines = {}
-    for _, l in ipairs(vim.fn.split(message, "\n")) do
+    for _, l in ipairs(vim.fn.split(message, "\n", true)) do
         table.insert(virt_lines, { { l, "Comment" } })
     end
     local first_line = table.remove(virt_lines, 1)
