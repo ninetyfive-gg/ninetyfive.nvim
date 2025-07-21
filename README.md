@@ -91,6 +91,18 @@ require("ninetyfive").setup({
 EOF
 ```
 
+### Lazyvim setup example:
+
+Create a plugin directory for ninetyfive, ex: `~/.config/nvim/lua/user/plugins/ninetyfive.lua`
+
+```lua
+return {
+  config = function()
+    require("ninetyfive").setup()
+  end
+}
+```
+
 ## Commands
 
 | Command               | Description                    |
