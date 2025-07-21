@@ -424,6 +424,13 @@ function Websocket.setup_autocommands()
         end,
     })
 
+    vim.api.nvim_create_autocmd("VimLeavePre", {
+        callback = function()
+            Websocket.shutdown()
+        end,
+        desc = "[ninetyfive] Close websocket connection on exit",
+    })
+
     -- Autocommand for new buffer creation
     vim.api.nvim_create_autocmd({ "BufReadPost" }, {
         pattern = "*",
@@ -498,6 +505,14 @@ local function pick_binary()
     end
 
     return ""
+end
+
+function Websocket.shutdown()
+    if _G.Ninetyfive.websocket_job then
+        log.debug("websocket", "Shutting down websocket process")
+        vim.fn.jobstop(_G.Ninetyfive.websocket_job)
+        _G.Ninetyfive.websocket_job = nil
+    end
 end
 
 -- Function to set up websocket connection
