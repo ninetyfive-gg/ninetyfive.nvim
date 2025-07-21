@@ -84,7 +84,7 @@ end
 local function set_workspace()
     local head = git.get_head()
     local git_root = git.get_repo_root()
-    
+
     local repo = "unknown"
     if git_root then
         local repo_match = string.match(git_root, "/([^/]+)$")
@@ -179,9 +179,9 @@ local function send_file_delta(args)
     local replaced_text = string.sub(prev, start_pos + 1, prev_end)
     local new_text = string.sub(curr, start_pos + 1, curr_end)
 
-    if (new_text == "") then
+    if new_text == "" then
         return
-     end
+    end
 
     -- Calculate end position
     local end_pos = start_pos + #replaced_text
@@ -388,7 +388,7 @@ function Websocket.setup_autocommands()
         group = ninetyfive_augroup,
         callback = function(args)
             local bufnr = args.buf
-            
+
             suggestion.clear()
             current_completion = nil
 
@@ -546,7 +546,9 @@ function Websocket.setup_connection(server_uri, user_id, api_key)
         ws_uri,
     }, {
         on_stdout = function(_, data, _)
-            if not data then return end
+            if not data then
+                return
+            end
 
             for _, line in ipairs(data) do
                 if line ~= "" then
@@ -562,7 +564,6 @@ function Websocket.setup_connection(server_uri, user_id, api_key)
 
                     if msg_type == "subscription-info" then
                         log.debug("messages", "<- [subscription-info]", parsed)
-
                     elseif msg_type == "get-commit" then
                         local commit = git.get_commit(parsed.commitHash)
                         if commit then
@@ -575,7 +576,6 @@ function Websocket.setup_connection(server_uri, user_id, api_key)
                                 log.debug("websocket", "Failed to send commit")
                             end
                         end
-
                     elseif msg_type == "get-blob" then
                         local blob = git.get_blob(parsed.commitHash, parsed.path)
                         if blob then
@@ -592,7 +592,6 @@ function Websocket.setup_connection(server_uri, user_id, api_key)
                                 log.debug("websocket", "Failed to send blob")
                             end
                         end
-
                     else
                         local c = current_completion
                         if c and c.request_id == parsed.r then

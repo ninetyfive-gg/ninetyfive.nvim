@@ -275,7 +275,7 @@ suggestion.accept = function()
                 extmark_text = extmark_text .. part[1]
             end
         end
-        
+
         -- Add the rest of the lines from virt_lines
         if details.virt_lines then
             for _, virt_line in ipairs(details.virt_lines) do
