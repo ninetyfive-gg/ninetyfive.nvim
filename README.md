@@ -97,11 +97,20 @@ Create a plugin directory for ninetyfive, ex: `~/.config/nvim/lua/user/plugins/n
 
 ```lua
 return {
+  "https://github.com/ninetyfive-gg/ninetyfive.nvim",
   config = function()
     require("ninetyfive").setup()
-  end
+  end,
+  version = false, -- we don't have versioning in the plugin yet
 }
 ```
+
+### Pulling latest plugin code using nvim + Lazy
+
+We don't have versioning in the plugin yet, so we need to pull the latest code using `git` and `nvim`'s built-in `git` plugin.
+
+Run `:Lazy update ninetyfive` within neovim to pull the latest commits from main.
+
 
 ## Commands
 
