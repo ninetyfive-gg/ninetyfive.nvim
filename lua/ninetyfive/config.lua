@@ -24,6 +24,13 @@ Ninetyfive.options = {
         -- Sets a global mapping to reject a suggestion
         reject = "<C-w>",
     },
+
+    indexing = {
+        -- Possible values: "ask" | "on" | "off"
+        mode = "ask",
+        -- Whether to cache the user's answer in /tmp per project
+        cache_consent = true,
+    },
 }
 
 ---@private
