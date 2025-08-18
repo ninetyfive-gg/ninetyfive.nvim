@@ -15,6 +15,12 @@ local current_completion = nil
 local buffer = nil
 local active_text = nil
 
+local tmp_root = vim.loop.os_tmpdir() or "/tmp"
+local cache_dir = tmp_root .. "/ninetyfive-cache"
+vim.fn.mkdir(cache_dir, "p")
+
+local cache_path = cache_dir .. "/consent.json"
+
 function Websocket.has_active()
     return current_completion ~= nil
         and current_completion.completion ~= ""
@@ -81,55 +87,108 @@ local function send_file_content()
     end
 end
 
+local function get_indexing_consent(callback)
+  local mode = (_G.Ninetyfive.config.indexing.mode) or "ask"
+  local use_cache = (_G.Ninetyfive.config.indexing.cache_consent) ~= false
+
+  -- check the config and short circuit
+  if mode == "on" then
+    callback(true)
+    return
+  elseif mode == "off" then
+    callback(false)
+    return
+  end
+
+  -- if caching is enabled, check it first
+  if use_cache then
+    local f = io.open(cache_path, "r")
+    if f then
+      local data = f:read("*a")
+      f:close()
+      local ok, parsed = pcall(vim.json.decode, data)
+      if ok and parsed and parsed.consent ~= nil then
+        callback(parsed.consent)
+        return
+      end
+    end
+  end
+
+  vim.ui.select({ "Allow", "Deny" }, {
+    prompt = "This extension can index your workspace to provide better completions. Would you like to allow this?",
+  }, function(choice)
+    if not choice then return end
+    local consent = (choice == "Allow")
+
+    -- persist it to our cache
+    if use_cache then
+      local ok, out = pcall(vim.json.encode, { consent = consent })
+      if ok then
+        local wf = io.open(cache_path, "w")
+        if wf then
+          wf:write(out)
+          wf:close()
+        end
+      end
+    end
+
+    callback(consent)
+  end)
+end
+
 local function set_workspace()
-    local head = git.get_head()
-    local git_root = git.get_repo_root()
+    get_indexing_consent(function(allowed)
+        local head = git.get_head()
+        local git_root = git.get_repo_root()
 
-    local repo = "unknown"
-    if git_root then
-        local repo_match = string.match(git_root, "/([^/]+)$")
-        if repo_match then
-            repo = repo_match
-        end
-    else
-        local cwd = vim.fn.getcwd()
-        local repo_match = string.match(cwd, "/([^/]+)$")
-        if repo_match then
-            repo = repo_match
-        end
-    end
-
-    if head ~= nil and head.hash ~= "" then
-        local set_workspace = vim.json.encode({
-            type = "set-workspace",
-            commitHash = head.hash,
-            path = git_root,
-            name = repo .. "/" .. head.branch,
-            features = { "edits" },
-        })
-
-        if not Websocket.send_message(set_workspace) then
-            log.debug("websocket", "Failed to set-workspace")
-        end
-    else
-        local empty_workspace = vim.json.encode({
-            type = "set-workspace",
-            features = { "edits" },
-        })
-
-        if not Websocket.send_message(empty_workspace) then
-            log.debug("websocket", "Failed to empty set-workspace")
+        local repo = "unknown"
+        if git_root then
+            local repo_match = string.match(git_root, "/([^/]+)$")
+            if repo_match then
+                repo = repo_match
+            end
+        else
+            local cwd = vim.fn.getcwd()
+            local repo_match = string.match(cwd, "/([^/]+)$")
+            if repo_match then
+                repo = repo_match
+            end
         end
 
-        local bufnr = vim.api.nvim_get_current_buf()
-        local curr_text = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
+        if head ~= nil and head.hash ~= "" then
+            local set_workspace = vim.json.encode({
+                type = "set-workspace",
+                commitHash = head.hash,
+                path = git_root,
+                name = repo .. "/" .. head.branch,
+                features = { "edits" },
+                indexingEnabled = allowed
+            })
 
-        if active_text ~= curr_text then
-            active_text = curr_text
-            send_file_content()
-            current_completion = nil
+            if not Websocket.send_message(set_workspace) then
+                log.debug("websocket", "Failed to set-workspace")
+            end
+        else
+            local empty_workspace = vim.json.encode({
+                type = "set-workspace",
+                features = { "edits" },
+                indexingEnabled = allowed
+            })
+
+            if not Websocket.send_message(empty_workspace) then
+                log.debug("websocket", "Failed to empty set-workspace")
+            end
+
+            local bufnr = vim.api.nvim_get_current_buf()
+            local curr_text = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
+
+            if active_text ~= curr_text then
+                active_text = curr_text
+                send_file_content()
+                current_completion = nil
+            end
         end
-    end
+    end)
 end
 
 -- Function to send file delta (changes only)
