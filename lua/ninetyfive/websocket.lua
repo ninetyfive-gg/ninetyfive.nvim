@@ -15,11 +15,9 @@ local current_completion = nil
 local buffer = nil
 local active_text = nil
 
-local tmp_root = vim.loop.os_tmpdir() or "/tmp"
-local cache_dir = tmp_root .. "/ninetyfive-cache"
-vim.fn.mkdir(cache_dir, "p")
-
-local cache_path = cache_dir .. "/consent.json"
+local home = vim.fn.expand("~")
+local cache_path = home .. "/.ninetyfive/consent.json"
+vim.fn.mkdir(home .. "/.ninetyfive", "p")
 
 function Websocket.has_active()
     return current_completion ~= nil
