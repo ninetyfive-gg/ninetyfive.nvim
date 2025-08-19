@@ -143,28 +143,43 @@ function git.get_commit(hash)
 end
 
 function git.get_blob(hash, file)
-    -- Get the blob content
-    local blob_command = string.format("git show %s:%s", hash, file)
-    local blob = run_git_command(blob_command)
-    if not blob then
+    local ok, result = pcall(function()
+        local blob_command = string.format("git show %s:%s", hash, file)
+        local blob = run_git_command(blob_command)
+        if not blob then
+            return nil
+        end
+
+        local parent_line = run_git_command(string.format("git rev-list --parents -n 1 %s", hash))
+        if not parent_line then
+            return nil
+        end
+        local parents = vim.split(parent_line, "%s+")
+        local parent = parents[2] -- first parent if exists
+
+        local encoded_diff = ""
+        if parent then
+            -- only run diff if parent exists
+            local diff_command = string.format("git diff %s %s -- %s", parent, hash, file)
+            local diff = run_git_command(diff_command)
+            if diff then
+                encoded_diff = vim.base64.encode(diff)
+            end
+        end
+
+        local encoded_blob = vim.base64.encode(blob)
+
+        return {
+            blob = encoded_blob,
+            diff = encoded_diff,
+        }
+    end)
+
+    if ok then
+        return result
+    else
         return nil
     end
-
-    -- Get the diff
-    local diff_command = string.format("git diff %s^ %s -- %s", hash, hash, file)
-    local diff = run_git_command(diff_command)
-    if not diff then
-        return nil
-    end
-
-    -- Compress and encode blob and diff
-    local encoded_blob = vim.base64.encode(blob)
-    local encoded_diff = vim.base64.encode(diff)
-
-    return {
-        blob = encoded_blob,
-        diff = encoded_diff,
-    }
 end
 
 function git.is_ignored(file_path)
