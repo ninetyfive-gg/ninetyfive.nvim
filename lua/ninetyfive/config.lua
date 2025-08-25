@@ -79,7 +79,7 @@ local function register_mappings(options, mappings)
             opts.expr = true
             vim.keymap.set("i", key, function()
                 if websocket.has_active and websocket.has_active() then
-                    return "<Cmd>NinetyfiveAccept<CR>"
+                    return "<Cmd>NinetyFiveAccept<CR>"
                 else
                     return vim.fn.pumvisible() == 1 and "<C-n>" or "<Tab>"
                 end
@@ -101,9 +101,9 @@ function Ninetyfive.setup(options)
     log.warn_deprecation(Ninetyfive.options)
 
     register_mappings(Ninetyfive.options.mappings, {
-        accept = "<Cmd>NinetyfiveAccept<CR>",
-        accept_edit = "<Cmd>NinetyfiveAcceptEdit<CR>",
-        reject = "<Cmd>NinetyfiveReject<CR>",
+        accept = "<Cmd>NinetyFiveAccept<CR>",
+        accept_edit = "<Cmd>NinetyFiveAcceptEdit<CR>",
+        reject = "<Cmd>NinetyFiveReject<CR>",
     })
 
     return Ninetyfive.options

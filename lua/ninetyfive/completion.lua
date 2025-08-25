@@ -7,7 +7,7 @@ Completion.__index = Completion
 function Completion.new(request_id)
     local self = setmetatable({}, Completion)
     self.request_id = request_id
-    self.completion = ""
+    self.completion = {}
     self.consumed = 0
     self.is_closed = false
     self.edits = {}

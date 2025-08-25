@@ -190,7 +190,24 @@ suggestion.showEditDescription = function(completion)
     })
 end
 
-suggestion.show = function(message)
+suggestion.show = function(completion)
+    -- build text up to the next flush
+    local parts = {}
+    if type(completion) == "table" then
+        for _, item in ipairs(completion) do
+            if item.v and item.v ~= vim.NIL then
+                table.insert(parts, tostring(item.v))
+            end
+            if item.flush then
+                break
+            end
+        end
+    elseif type(completion) == "string" then
+      parts = { completion }
+    end
+
+    local text = table.concat(parts)
+
     local bufnr = vim.api.nvim_get_current_buf()
     local cursor = vim.api.nvim_win_get_cursor(0)
     local line = cursor[1] - 1
@@ -200,15 +217,11 @@ suggestion.show = function(message)
     vim.api.nvim_buf_clear_namespace(bufnr, ninetyfive_ns, 0, -1)
 
     local virt_lines = {}
-
-    -- ensure that the message is split into lines, even if the message is just "\n"
-    for _, l in ipairs(vim.fn.split(message, "\n", true)) do
+    for _, l in ipairs(vim.fn.split(text, "\n", true)) do
         table.insert(virt_lines, { { l, "Comment" } })
     end
-    local first_line = table.remove(virt_lines, 1)
+    local first_line = table.remove(virt_lines, 1) or { { "", "Comment" } }
 
-    -- Set the ghost text using an extmark
-    -- https://neovim.io/doc/user/api.html#nvim_buf_set_extmark()
     completion_id = vim.api.nvim_buf_set_extmark(bufnr, ninetyfive_ns, line, col, {
         right_gravity = true,
         virt_text = first_line,
@@ -254,7 +267,7 @@ suggestion.accept_edit = function(current_completion)
     end
 end
 
-suggestion.accept = function()
+suggestion.accept = function(current_completion)
     if completion_id == "" then
         return
     end
@@ -289,11 +302,9 @@ suggestion.accept = function()
         -- Remove the suggestion
         vim.api.nvim_buf_del_extmark(bufnr, ninetyfive_ns, completion_id)
 
-        -- Inserting the completion has to be done line by line
         local new_line, new_col = line, col
 
         if string.find(extmark_text, "\n") then
-            -- preserves whitespace characters; before, we were removing them
             local lines = vim.split(extmark_text, "\n", { plain = true, trimempty = false })
 
             -- Insert the first line at the cursor position
@@ -328,12 +339,55 @@ suggestion.accept = function()
             new_col = col + #extmark_text
         end
 
-        -- Move cursor to the end of inserted text
         vim.api.nvim_win_set_cursor(0, { new_line + 1, new_col })
 
-        completion_id = ""
+        -- after accept, slice the original array
+        local has_remaining = false
+        if current_completion and type(current_completion.completion) == "table" then
+            local arr = current_completion.completion
+            local flush_idx = nil
+
+            for i, item in ipairs(arr) do
+                if item.flush == true then
+                    flush_idx = i
+                    break
+                end
+            end
+
+            if flush_idx then
+                local old_len = #arr
+                local new_len = old_len - flush_idx
+                
+                for i = 1, new_len do
+                    arr[i] = arr[i + flush_idx]
+                end
+                
+                for i = old_len, new_len + 1, -1 do
+                    arr[i] = nil
+                end
+                
+                if #arr > 0 then
+                    has_remaining = true
+                end
+            else
+                for i = #arr, 1, -1 do
+                    arr[i] = nil
+                end
+            end
+        end
+
+        if has_remaining then
+            vim.defer_fn(function()
+                suggestion.show(current_completion.completion)
+            end, 10)
+        else
+            -- do a reset once no completions exist
+            vim.b[bufnr].ninetyfive_accepting = false
+            completion_id = ""
+        end
     end
 end
+
 
 suggestion.clear = function()
     local buffer = vim.api.nvim_get_current_buf()

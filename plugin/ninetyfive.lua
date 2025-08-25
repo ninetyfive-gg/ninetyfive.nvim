@@ -12,23 +12,23 @@ _G.NinetyfiveLoaded = true
 if vim.fn.has("nvim-0.7") == 0 then
     vim.cmd("command! Ninetyfive lua require('ninetyfive').toggle()")
 else
-    vim.api.nvim_create_user_command("Ninetyfive", function()
+    vim.api.nvim_create_user_command("NinetyFive", function()
         require("ninetyfive").toggle()
     end, { desc = "Toggles the plugin." })
 
-    vim.api.nvim_create_user_command("NinetyfiveAccept", function()
+    vim.api.nvim_create_user_command("NinetyFiveAccept", function()
         require("ninetyfive").accept()
     end, { desc = "Accepts a suggestion." })
 
-    vim.api.nvim_create_user_command("NinetyfiveAcceptEdit", function()
+    vim.api.nvim_create_user_command("NinetyFiveAcceptEdit", function()
         require("ninetyfive").accept_edit()
     end, { desc = "Accepts an edit." })
 
-    vim.api.nvim_create_user_command("NinetyfiveReject", function()
+    vim.api.nvim_create_user_command("NinetyFiveReject", function()
         require("ninetyfive").reject()
     end, { desc = "Rejects a suggestion." })
 
-    vim.api.nvim_create_user_command("NinetyfiveKey", function()
+    vim.api.nvim_create_user_command("NinetyFiveKey", function()
         local api_key = vim.fn.input("Enter API Key: ")
         if api_key and api_key ~= "" then
             require("ninetyfive").setApiKey(api_key)
@@ -38,7 +38,7 @@ else
         end
     end, { desc = "Sets the API Key." })
 
-    vim.api.nvim_create_user_command("NinetyfivePurchase", function()
+    vim.api.nvim_create_user_command("NinetyFivePurchase", function()
         local url = "https://ninetyfive.gg/api/payment"
         local cmd
         if os_uname == "Linux" then
