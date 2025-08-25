@@ -20,10 +20,18 @@ local cache_path = home .. "/.ninetyfive/consent.json"
 vim.fn.mkdir(home .. "/.ninetyfive", "p")
 
 function Websocket.has_active()
-    return current_completion ~= nil
-        and current_completion.completion ~= ""
-        -- ensure that the completion is not just whitespace
-        and current_completion.completion:match("%S") ~= nil
+    if not current_completion or not current_completion.completion then
+        return false
+    end
+
+    -- scan through the list of parsed items
+    for _, item in ipairs(current_completion.completion) do
+        if item.v and tostring(item.v):match("%S") then
+            return true
+        end
+    end
+
+    return false
 end
 
 function Websocket.clear()
@@ -369,12 +377,22 @@ end
 function Websocket.accept()
     if
         current_completion ~= nil
-        and current_completion.completion ~= ""
+        and #current_completion.completion > 0
         and buffer == vim.api.nvim_get_current_buf()
     then
-        suggestion.accept()
+        local bufnr = vim.api.nvim_get_current_buf()
+        vim.b[bufnr].ninetyfive_accepting = true
 
-        current_completion:consume(string.len(current_completion.completion))
+        local built = {}
+        for _, item in ipairs(current_completion.completion) do
+            if item.v and item.v ~= vim.NIL then
+                table.insert(built, tostring(item.v))
+            end
+        end
+        local accepted_text = table.concat(built)
+
+        suggestion.accept(current_completion)
+        current_completion:consume(#accepted_text)
 
         local edit = current_completion:next_edit()
 
@@ -391,30 +409,15 @@ function Websocket.accept()
 
         if edit.text == "" then
             suggestion.showDeleteSuggestion(edit)
-            current_completion.edit_index = current_completion.edit_index + 1
         elseif edit.start == edit["end"] then
             suggestion.showInsertSuggestion(edit.start, edit["end"], edit.text)
-            current_completion.edit_index = current_completion.edit_index + 1
         else
             suggestion.showUpdateSuggestion(edit.start, edit["end"], edit.text)
-            current_completion.edit_index = current_completion.edit_index + 1
         end
 
-        -- Notify completion accept
-        -- local message = vim.json.encode({
-        --     type = "accept-completion",
-        --     completion = current_completion.request_id,
-        -- })
+        current_completion.edit_index = current_completion.edit_index + 1
 
-        -- -- log.debug("messages", "-> [accept-completion]", current_completion.request_id)
-
-        -- if not Websocket.send_message(message) then
-        --     -- log.debug("websocket", "Failed to send accept-completion message")
-        -- end
-
-        -- TODO we only clear the completion once its been consumed, or cancelled...
-        -- completion = ""
-        -- request_id = ""
+        -- TODO: we only clear the completion once its been consumed, or cancelled...
     end
 end
 
@@ -435,6 +438,10 @@ function Websocket.setup_autocommands()
         pattern = "*",
         group = ninetyfive_augroup,
         callback = function(args)
+            if vim.b[args.buf].ninetyfive_accepting then
+                return
+            end
+
             suggestion.clear()
             current_completion = nil
         end,
@@ -445,6 +452,10 @@ function Websocket.setup_autocommands()
         group = ninetyfive_augroup,
         callback = function(args)
             local bufnr = args.buf
+
+            if vim.b[bufnr].ninetyfive_accepting then
+                return
+            end
 
             suggestion.clear()
             current_completion = nil
@@ -520,10 +531,11 @@ function Websocket.setup_autocommands()
     })
 
     vim.api.nvim_create_autocmd("InsertLeave", {
-        callback = function()
+        callback = function(args)
             -- We dont need to display suggestions when the user leaves insert mode
             suggestion.clear()
             current_completion = nil
+            vim.b[args.buf].ninetyfive_accepting = false
         end,
     })
 end
@@ -653,7 +665,7 @@ function Websocket.setup_connection(server_uri, user_id, api_key)
                         local c = current_completion
                         if c and c.request_id == parsed.r then
                             if parsed.v and parsed.v ~= vim.NIL then
-                                c.completion = c.completion .. tostring(parsed.v)
+                                table.insert(c.completion, parsed)
                             end
                             if parsed.e then
                                 c.edits = parsed.e
