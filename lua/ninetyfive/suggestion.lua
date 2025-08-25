@@ -198,7 +198,7 @@ suggestion.show = function(completion)
             if item.v and item.v ~= vim.NIL then
                 table.insert(parts, tostring(item.v))
             end
-            if item.flush == true then
+            if item.flush then
                 break
             end
         end
@@ -368,9 +368,6 @@ suggestion.accept = function(current_completion)
                 
                 if #arr > 0 then
                     has_remaining = true
-                    for i = 1, math.min(3, #arr) do
-                        local item = arr[i]
-                    end
                 end
             else
                 for i = #arr, 1, -1 do
