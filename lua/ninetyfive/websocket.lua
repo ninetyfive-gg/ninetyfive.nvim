@@ -453,6 +453,13 @@ function Websocket.setup_autocommands()
         callback = function(args)
             local bufnr = args.buf
 
+            local filetype = vim.bo[bufnr].filetype
+
+            -- We do not want to trigger when people are in the oil.nvim buffer
+            if filetype == "oil" then
+                return
+            end
+
             if vim.b[bufnr].ninetyfive_accepting then
                 return
             end
