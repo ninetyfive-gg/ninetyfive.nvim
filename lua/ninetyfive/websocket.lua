@@ -511,6 +511,14 @@ function Websocket.setup_autocommands()
         pattern = "*",
         group = ninetyfive_augroup,
         callback = function(args)
+            local bufnr = args.buf
+            local filetype = vim.bo[bufnr].filetype
+
+            -- We do not want to trigger when people are in the oil.nvim buffer
+            if filetype == "oil" then
+                return
+            end
+            
             local ok, err = pcall(function()
                 -- Check that we're connected
                 if
