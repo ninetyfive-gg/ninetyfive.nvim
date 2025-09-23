@@ -143,58 +143,54 @@ local function get_indexing_consent(callback)
 end
 
 local function set_workspace()
-    get_indexing_consent(function(allowed)
-        local head = git.get_head()
-        local git_root = git.get_repo_root()
+    local head = git.get_head()
+    local git_root = git.get_repo_root()
 
-        local repo = "unknown"
-        if git_root then
-            local repo_match = string.match(git_root, "/([^/]+)$")
-            if repo_match then
-                repo = repo_match
-            end
-        else
-            local cwd = vim.fn.getcwd()
-            local repo_match = string.match(cwd, "/([^/]+)$")
-            if repo_match then
-                repo = repo_match
-            end
+    local repo = "unknown"
+    if git_root then
+        local repo_match = string.match(git_root, "/([^/]+)$")
+        if repo_match then
+            repo = repo_match
+        end
+    else
+        local cwd = vim.fn.getcwd()
+        local repo_match = string.match(cwd, "/([^/]+)$")
+        if repo_match then
+            repo = repo_match
+        end
+    end
+
+    if head ~= nil and head.hash ~= "" then
+        local set_workspace = vim.json.encode({
+            type = "set-workspace",
+            commitHash = head.hash,
+            path = git_root,
+            name = repo .. "/" .. head.branch,
+            features = { "edits" },
+        })
+
+        if not Websocket.send_message(set_workspace) then
+            log.debug("websocket", "Failed to set-workspace")
+        end
+    else
+        local empty_workspace = vim.json.encode({
+            type = "set-workspace",
+            features = { "edits" },
+        })
+
+        if not Websocket.send_message(empty_workspace) then
+            log.debug("websocket", "Failed to empty set-workspace")
         end
 
-        if head ~= nil and head.hash ~= "" then
-            local set_workspace = vim.json.encode({
-                type = "set-workspace",
-                commitHash = head.hash,
-                path = git_root,
-                name = repo .. "/" .. head.branch,
-                features = { "edits" },
-                indexingEnabled = allowed
-            })
+        local bufnr = vim.api.nvim_get_current_buf()
+        local curr_text = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
 
-            if not Websocket.send_message(set_workspace) then
-                log.debug("websocket", "Failed to set-workspace")
-            end
-        else
-            local empty_workspace = vim.json.encode({
-                type = "set-workspace",
-                features = { "edits" },
-                indexingEnabled = allowed
-            })
-
-            if not Websocket.send_message(empty_workspace) then
-                log.debug("websocket", "Failed to empty set-workspace")
-            end
-
-            local bufnr = vim.api.nvim_get_current_buf()
-            local curr_text = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
-
-            if active_text ~= curr_text then
-                active_text = curr_text
-                send_file_content()
-                current_completion = nil
-            end
+        if active_text ~= curr_text then
+            active_text = curr_text
+            send_file_content()
+            current_completion = nil
         end
-    end)
+    end
 end
 
 -- Function to send file delta (changes only)
@@ -618,28 +614,35 @@ function Websocket.setup_connection(server_uri, user_id, api_key)
         ws_uri = ws_uri .. "&api_key=" .. api_key
     end
 
-    if api_key and api_key ~= "" then
-        log.debug("websocket", "Syncing git repository data...")
-        
-        vim.defer_fn(function()
-            vim.schedule(function()
-                local ok, err = pcall(function()
-                    local base_url = server_uri:gsub("^ws://", "http://"):gsub("^wss://", "https://")
-                    local git_endpoint = base_url:gsub("/ws$", "") .. "/datasets"
+    get_indexing_consent(function(allowed)
+        if not allowed then
+            log.debug("websocket", "Indexing consent not granted, skipping git sync")
+            return
+        end
+
+        if api_key and api_key ~= "" then
+            print("indexing consent allowed and api key exists, syncing repository data...")
+
+            vim.defer_fn(function()
+                vim.schedule(function()
+                    local ok, err = pcall(function()
+                        local base_url = server_uri:gsub("^ws://", "http://"):gsub("^wss://", "https://")
+                        local git_endpoint = base_url:gsub("/ws$", "") .. "/datasets"
+                        
+                        git.sync_current_repo(api_key, git_endpoint, 50) -- limit to 50 commits for now
+                        
+                        log.debug("websocket", "Git repository sync completed")
+                    end)
                     
-                    git.sync_current_repo(api_key, git_endpoint, 50) -- limit to 50 commits for now
-                    
-                    log.debug("websocket", "Git repository sync completed")
+                    if not ok then
+                        log.notify("websocket", vim.log.levels.ERROR, true, "Failed to sync git repository: " .. tostring(err))
+                    end
                 end)
-                
-                if not ok then
-                    log.notify("websocket", vim.log.levels.ERROR, true, "Failed to sync git repository: " .. tostring(err))
-                end
-            end)
-        end, 2000)
-    else
-        log.debug("websocket", "No API key provided, skipping git sync")
-    end
+            end, 2000)
+        else
+            log.debug("websocket", "No API key provided, skipping git sync")
+        end
+    end)
 
     _G.Ninetyfive.websocket_job = vim.fn.jobstart({
         binary_path,
