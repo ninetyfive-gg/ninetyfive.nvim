@@ -1,5 +1,6 @@
 local uv = vim.uv or vim.loop
 local git = {}
+local log = require("ninetyfive.util.log")
 
 ---@alias Callback fun(...)
 local noop = function(...) end
@@ -9,6 +10,8 @@ local noop = function(...) end
 local function ensure_cb(cb)
   return type(cb) == "function" and cb or noop
 end
+
+local CHUNK_SIZE = 25
 
 ---@param callback Callback|nil
 ---@return Callback|nil
@@ -270,7 +273,7 @@ local function get_commit_hashes(max_entries, callback)
 
   run_git_command_at_root(cmd, function(output)
     if not output or output == "" then
-      print("No unpushed commits found, getting recent commits from current branch...")
+      log.debug("git", "No unpushed commits found, getting recent commits from current branch...")
       local fallback = string.format("git log --format=%%H --oneline --no-merges -%d", max_entries)
       run_git_command_at_root(fallback, function(output2)
         callback(parse(output2))
@@ -311,7 +314,7 @@ function git.get_git_blobs(commit_hash, callback)
                   diff = blob_data.diff ~= "" and blob_data.diff or nil
                 })
               else
-                print("failed to get blob for file: " .. file_path)
+                log.debug("git", "failed to get blob for file: " .. file_path)
               end
               idx = idx + 1
               step()
@@ -334,13 +337,13 @@ function git.get_all_commits_and_blobs(max_entries, callback)
 
   git.get_repo_root(function(root)
     if not root then callback({ commits = commits, blobs = blobs }); return end
-    print("fetching commit/blob info...")
+    log.debug("git", "fetching commit/blob info...")
 
     get_commit_hashes(max_entries, function(cs)
       commits = cs or {}
 
       if #commits == 0 then
-        print("no commits found for current branch")
+        log.debug("git", "no commits found for current branch")
         callback({ commits = commits, blobs = blobs })
         return
       end
@@ -364,7 +367,6 @@ end
 
 function git.send_blobs_to_endpoint(job_data, api_key, endpoint_url, callback)
   callback = ensure_cb(callback)
-  local CHUNK_SIZE = 100
   local blobs = job_data.blobs
   local total_chunks = math.ceil(#blobs / CHUNK_SIZE)
   local i = 1
@@ -405,18 +407,7 @@ function git.send_blobs_to_endpoint(job_data, api_key, endpoint_url, callback)
     )
 
     uv_run_async(curl_cmd, nil, function(response)
-      if not response then print("request failed for chunk " .. chunk_number .. "/" .. total_chunks); callback(false); return end
-
-      local http_code = response:match("(%d+)$")
-      local response_body = response:gsub("%d+$", "")
-
-      if http_code and tonumber(http_code) >= 200 and tonumber(http_code) < 300 then
-        print("successfully sent chunk " .. chunk_number .. "/" .. total_chunks)
-        local ok, response_data = pcall(vim.json.decode, response_body)
-        if ok and response_data then print("Response:", vim.inspect(response_data)) end
-      else
-        print("response:", response_body); callback(false); return
-      end
+      if not response then log.debug("git", "request failed for chunk " .. chunk_number .. "/" .. total_chunks); callback(false); return end
 
       i = end_idx + 1
       if i <= #blobs then vim.defer_fn(send_next, 100) else callback(true) end
@@ -435,7 +426,7 @@ function git.sync_repo_data(api_key, endpoint_url, branch_name, repo_name, max_e
     branch_name = branch_name or head_info.branch
     local function proceed(resolved_repo_name)
       git.get_all_commits_and_blobs(max_entries, function(result)
-        if (#result.commits == 0 and #result.blobs == 0) then print("no commits or blobs found"); callback(false); return end
+        if (#result.commits == 0 and #result.blobs == 0) then log.debug("git", "no commits or blobs found"); callback(false); return end
         local job_data = {
           commits = result.commits, blobs = result.blobs,
           branch_name = branch_name, repo_name = resolved_repo_name or "unknown"
