@@ -1,7 +1,5 @@
 local git = {}
 
--- Finds the root git repository for the current buffer, considering the use can have a cwd that
--- is not a git repository.
 git.get_repo_root = function()
     local buffer_dir = vim.fn.expand("%:p:h")
     local handle =
@@ -197,6 +195,252 @@ function git.is_ignored(file_path)
 
     -- An empty result means the file is not ignored
     return result ~= ""
+end
+
+local function run_git_command_at_root(cmd, callback)
+  local repo_root = git.get_repo_root()
+  if not repo_root then
+    if callback then callback(nil) end
+    return nil
+  end
+  
+  if not callback then
+    local result = vim.system({'sh', '-c', cmd}, { cwd = repo_root }):wait()
+    if result.code == 0 then
+      return result.stdout:gsub("\n$", "")
+    else
+      return nil
+    end
+  end
+  
+  vim.system({'sh', '-c', cmd}, { cwd = repo_root }, function(result)
+    if result.code == 0 then
+      callback(result.stdout:gsub("\n$", ""))
+    else
+      callback(nil)
+    end
+  end)
+end
+
+local function get_commit_hashes(max_entries)
+  max_entries = max_entries or 100
+  
+  local cmd = string.format("git log --format=%%H --oneline --no-merges origin/HEAD..HEAD -%d", max_entries)
+  local output = run_git_command_at_root(cmd)
+
+  if not output or output == "" then
+    print("No unpushed commits found, getting recent commits from current branch...")
+    cmd = string.format("git log --format=%%H --oneline --no-merges -%d", max_entries)
+    output = run_git_command_at_root(cmd)
+  end
+
+  if not output or output == "" then
+    return {}
+  end
+  
+  local commits = {}
+  for line in output:gmatch("[^\r\n]+") do
+    if line ~= "" then
+      local hash, message = line:match("^(%w+)%s+(.+)$")
+      if hash then
+        table.insert(commits, {
+          hash = hash,
+          message = message or "Commit message"
+        })
+      end
+    end
+  end
+  
+  return commits
+end
+
+function git.get_git_blobs(commit_hash)
+  local blobs = {}
+  local repo_root = git.get_repo_root()
+  
+  if not repo_root then
+    return blobs
+  end
+  
+  local commit_info = git.get_commit(commit_hash)
+  if not commit_info then
+    return blobs
+  end
+  
+  for _, file_info in ipairs(commit_info.files) do
+    local file_path = file_info.to or file_info.file
+    
+    if not git.is_ignored(file_path) then
+      local blob_data = git.get_blob(commit_hash, file_path)
+      
+      if blob_data then
+        table.insert(blobs, {
+          object_hash = file_info.object,
+          commit_hash = commit_hash,
+          path = file_path,
+          next = blob_data.blob, -- already base64 encoded
+          diff = blob_data.diff ~= "" and blob_data.diff or nil -- already base64 encoded
+        })
+      else
+        print("failed to get blob for file: " .. file_path)
+      end
+    end
+  end
+  
+  return blobs
+end
+
+function git.get_all_commits_and_blobs(max_entries)
+  local commits = {}
+  local blobs = {}
+  
+  if not git.get_repo_root() then
+    return { commits = commits, blobs = blobs }
+  end
+  
+  print("fetching commit/blob info...")
+  
+  commits = get_commit_hashes(max_entries)
+  
+  if #commits == 0 then
+    print("no commits found for current branch")
+    return { commits = commits, blobs = blobs }
+  end
+  
+  for _, commit in ipairs(commits) do
+    local commit_blobs = git.get_git_blobs(commit.hash)
+    for _, blob in ipairs(commit_blobs) do
+      table.insert(blobs, blob)
+    end
+  end
+  
+  return { commits = commits, blobs = blobs }
+end
+
+function git.send_blobs_to_endpoint(job_data, api_key, endpoint_url)
+  local CHUNK_SIZE = 100
+  local blobs = job_data.blobs
+  
+  local total_chunks = math.ceil(#blobs / CHUNK_SIZE)
+  
+  for i = 1, #blobs, CHUNK_SIZE do
+    local chunk = {}
+    local end_idx = math.min(i + CHUNK_SIZE - 1, #blobs)
+    
+    for j = i, end_idx do
+      table.insert(chunk, blobs[j])
+    end
+    
+    local chunk_number = math.floor((i - 1) / CHUNK_SIZE) + 1
+    
+    local chunk_blobs = {}
+    for _, blob in ipairs(chunk) do
+      table.insert(chunk_blobs, {
+        object_hash = blob.object_hash,
+        commit_hash = blob.commit_hash,
+        path = blob.path,
+        next = blob.next, -- already base64 encoded from git.get_blob
+        diff = blob.diff or vim.NIL -- already base64 encoded or nil
+      })
+    end
+    
+    local chunk_commits = {}
+    for _, commit in ipairs(job_data.commits) do
+      table.insert(chunk_commits, {
+        hash = type(commit) == "string" and commit or commit.hash,
+        message = type(commit) == "string" and "Commit message" or (commit.message or "Commit message")
+      })
+    end
+    
+    local payload = {
+      blobs = chunk_blobs,
+      commits = chunk_commits,
+      branch_name = job_data.branch_name,
+      repo_name = job_data.repo_name
+    }
+    
+    local json_payload = vim.json.encode(payload)
+    
+    local curl_cmd = string.format(
+      'curl -s -w "%%{http_code}" -X POST "%s" -H "Content-Type: application/json" -H "x-api-key: %s" -d %s',
+      endpoint_url,
+      api_key,
+      "'" .. json_payload:gsub("'", "'\"'\"'") .. "'"
+    )
+    
+    local handle = io.popen(curl_cmd)
+    if not handle then
+      return
+    end
+    
+    local response = handle:read("*a")
+    local success, exit_type, exit_code = handle:close()
+    
+    if not success then
+      print("request failed for chunk " .. chunk_number .. "/" .. total_chunks)
+      return
+    end
+    
+    local http_code = response:match("(%d+)$")
+    local response_body = response:gsub("%d+$", "")
+    
+    if http_code and tonumber(http_code) >= 200 and tonumber(http_code) < 300 then
+      print("successfully sent chunk " .. chunk_number .. "/" .. total_chunks)
+      
+      local ok, response_data = pcall(vim.json.decode, response_body)
+      if ok and response_data then
+        print("Response:", vim.inspect(response_data))
+      end
+    else
+      print("response:", response_body)
+    end
+    
+    ::continue::
+    
+    if i + CHUNK_SIZE <= #blobs then
+      vim.wait(100)
+    end
+  end
+end
+
+function git.sync_repo_data(api_key, endpoint_url, branch_name, repo_name, max_entries)
+  max_entries = max_entries or 100
+  
+  local head_info = git.get_head()
+  if not head_info then
+    return
+  end
+  
+  branch_name = branch_name or head_info.branch
+  
+  if not repo_name then
+    local repo_root = git.get_repo_root()
+    if repo_root then
+      repo_name = repo_root:match("([^/]+)$") or "unknown"
+    else
+      repo_name = "unknown"
+    end
+  end
+  
+  local result = git.get_all_commits_and_blobs(max_entries)
+  
+  if #result.commits == 0 and #result.blobs == 0 then
+    print("no commits or blobs found")
+    return
+  end
+  
+  local job_data = {
+    commits = result.commits,
+    blobs = result.blobs,
+    branch_name = branch_name,
+    repo_name = repo_name
+  }
+  
+  git.send_blobs_to_endpoint(job_data, api_key, endpoint_url)
+end
+
+function git.sync_current_repo(api_key, endpoint_url, max_entries)
+  git.sync_repo_data(api_key, endpoint_url, nil, nil, max_entries)
 end
 
 return git
