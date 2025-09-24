@@ -72,6 +72,10 @@ require("lazy").setup({"ninetyfive-gg/ninetyfive.nvim"})
 </table>
 </div>
 
+## Dependencies
+
+This module uses native `curl`. Ensure curl is installed on your system before installing the plugin.
+
 ## Set up
 
 You can tweak key mappings using `~/.config/nvim/init.vim` or `~/.vimrc` like this:

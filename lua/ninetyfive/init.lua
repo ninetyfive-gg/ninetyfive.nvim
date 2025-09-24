@@ -136,6 +136,9 @@ function Ninetyfive.setApiKey(api_key)
 
     -- We probably want to reconnect
     if _G.Ninetyfive and _G.Ninetyfive.websocket_job and _G.Ninetyfive.websocket_job > 0 then
+        vim.fn.jobstop(_G.Ninetyfive.websocket_job)
+        _G.Ninetyfive.websocket_job = nil
+
         local server = _G.Ninetyfive.config.server
         local user_data = get_user_data()
         websocket.setup_connection(server, user_data.user_id, user_data.api_key)
