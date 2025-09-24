@@ -109,7 +109,7 @@ return {
         cache_consent = false -- optional, defaults to true
       }
     })
-  end
+  end,
   version = false, -- we don't have versioning in the plugin yet
 }
 ```
