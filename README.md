@@ -127,9 +127,9 @@ Run `:Lazy update ninetyfive` within neovim to pull the latest commits from main
 
 | Command               | Description                    |
 | --------------------- | ------------------------------ |
-| `:Ninetyfive`         | Enables the plugin.            |
-| `:NinetyfivePurchase` | Redirects to the purchase page |
-| `:NinetyfiveKey`      | Provide an API key             |
+| `:NinetyFive`         | Enables the plugin.            |
+| `:NinetyFivePurchase` | Redirects to the purchase page |
+| `:NinetyFiveKey`      | Provide an API key             |
 
 ## Development
 
