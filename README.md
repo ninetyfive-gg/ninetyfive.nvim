@@ -42,10 +42,10 @@ use {"ninetyfive-gg/ninetyfive.nvim"}
 </td>
 <td>
 
-```lua
--- stable version
+```vim
+" stable version
 Plug "ninetyfive-gg/ninetyfive.nvim", { "tag": "*" }
--- dev version
+" dev version
 Plug "ninetyfive-gg/ninetyfive.nvim"
 ```
 
