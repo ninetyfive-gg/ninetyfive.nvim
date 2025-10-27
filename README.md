@@ -27,9 +27,9 @@ Very fast autocomplete
 
 ```lua
 -- stable version
-use {"ninetyfive.nvim", tag = "*" }
+use {"ninetyfive-gg/ninetyfive.nvim", tag = "*" }
 -- dev version
-use {"ninetyfive.nvim"}
+use {"ninetyfive-gg/ninetyfive.nvim"}
 ```
 
 </td>
@@ -44,9 +44,9 @@ use {"ninetyfive.nvim"}
 
 ```lua
 -- stable version
-Plug "ninetyfive.nvim", { "tag": "*" }
+Plug "ninetyfive-gg/ninetyfive.nvim", { "tag": "*" }
 -- dev version
-Plug "ninetyfive.nvim"
+Plug "ninetyfive-gg/ninetyfive.nvim"
 ```
 
 </td>
@@ -76,41 +76,124 @@ require("lazy").setup({"ninetyfive-gg/ninetyfive.nvim"})
 
 This module uses native `curl`. Ensure curl is installed on your system before installing the plugin.
 
-## Set up
+## Configuration
 
-You can tweak key mappings using `~/.config/nvim/init.vim` or `~/.vimrc` like this:
+### Configuration Options
+
+All available configuration options with their default values:
+
+```lua
+require("ninetyfive").setup({
+  -- Prints useful logs about what events are triggered, and reasons actions are executed
+  debug = false,
+  
+  -- When `true`, enables the plugin on NeoVim startup
+  enable_on_startup = true,
+  
+  -- Update server URI, mostly for debugging
+  server = "wss://api.ninetyfive.gg",
+  
+  -- Key mappings configuration
+  mappings = {
+    -- When `true`, creates all the mappings set
+    enabled = true,
+    -- Sets a global mapping to accept a suggestion
+    accept = "<Tab>",
+    -- Sets a global mapping to accept a suggestion and edit
+    accept_edit = "<C-g>",
+    -- Sets a global mapping to reject a suggestion
+    reject = "<C-w>",
+  },
+  
+  -- Code indexing configuration for better completions
+  indexing = {
+    -- Possible values: "ask" | "on" | "off"
+    -- "ask" - prompt user for permission to index code
+    -- "on" - automatically index code
+    -- "off" - disable code indexing
+    mode = "ask",
+    -- Whether to cache the user's answer per project
+    cache_consent = true,
+  },
+})
+```
+
+### Setup Examples
+
+#### Using [wbthomason/packer.nvim](https://github.com/wbthomason/packer.nvim)
+
+```lua
+use {
+  "ninetyfive-gg/ninetyfive.nvim",
+  tag = "*", -- use stable version
+  config = function()
+    require("ninetyfive").setup({
+      enable_on_startup = true,
+      mappings = {
+        enabled = true,
+        accept = "<Tab>",
+        accept_edit = "<C-g>",
+        reject = "<C-w>",
+      },
+      indexing = {
+        mode = "ask",
+        cache_consent = true,
+      },
+    })
+  end,
+}
+```
+
+#### Using [junegunn/vim-plug](https://github.com/junegunn/vim-plug)
+
+Add to your `~/.config/nvim/init.vim` or `~/.vimrc`:
 
 ```vim
-filetype plugin on
+Plug 'ninetyfive-gg/ninetyfive.nvim', { 'tag': '*' }
 
+" After plug#end(), add the setup configuration
 lua << EOF
 require("ninetyfive").setup({
-  enable_on_startup = true, -- Enable plugin on startup
+  enable_on_startup = true,
   mappings = {
-    enable = true,    -- Enable default keybindings
-    accept = "<C-f>", -- Change default keybindings
-    reject = "<C-w>", -- Change default keybindings
-  }
+    enabled = true,
+    accept = "<Tab>",
+    accept_edit = "<C-g>",
+    reject = "<C-w>",
+  },
+  indexing = {
+    mode = "ask",
+    cache_consent = true,
+  },
 })
 EOF
 ```
 
-### Lazyvim setup example:
+#### Using [folke/lazy.nvim](https://github.com/folke/lazy.nvim)
 
-Create a plugin directory for ninetyfive, ex: `~/.config/nvim/lua/user/plugins/ninetyfive.lua`
+Create a plugin file (e.g., `~/.config/nvim/lua/plugins/ninetyfive.lua`):
 
 ```lua
 return {
-  "https://github.com/ninetyfive-gg/ninetyfive.nvim",
+  "ninetyfive-gg/ninetyfive.nvim",
+  version = "*", -- use stable version, or `false` for dev version
   config = function()
     require("ninetyfive").setup({
+      enable_on_startup = true,
+      debug = false,
+      server = "wss://api.ninetyfive.gg",
+      mappings = {
+        enabled = true,
+        accept = "<Tab>",
+        accept_edit = "<C-g>",
+        reject = "<C-w>",
+      },
       indexing = {
-        mode = "on", -- enables code indexing for better completions. 'ask' by default.
-        cache_consent = false -- optional, defaults to true
-      }
+        mode = "ask",
+        cache_consent = true,
+      },
     })
   end,
-  version = false, -- we don't have versioning in the plugin yet
 }
 ```
 
