@@ -4,3 +4,6 @@ Ninetyfive.options	ninetyfive.txt	/*Ninetyfive.options*
 Ninetyfive.setApiKey()	ninetyfive.txt	/*Ninetyfive.setApiKey()*
 Ninetyfive.setup()	ninetyfive.txt	/*Ninetyfive.setup()*
 Ninetyfive.toggle()	ninetyfive.txt	/*Ninetyfive.toggle()*
+ensure_cb()	ninetyfive.txt	/*ensure_cb()*
+noop()	ninetyfive.txt	/*noop()*
+uv_run_async()	ninetyfive.txt	/*uv_run_async()*
