@@ -13,13 +13,13 @@ local function get_plugin_root()
 end
 
 local function enable_websocket(server_uri, user_id, api_key)
-    local ok = websocket.setup_connection(server_uri, user_id, api_key)
+    local ok, err = websocket.setup_connection(server_uri, user_id, api_key)
     if ok then
         mode = "websocket"
         return true
     end
 
-    return false
+    return false, err
 end
 
 local function enable_sse(server_uri, user_id, api_key)
@@ -76,12 +76,20 @@ function Transport.setup_connection(server_uri, user_id, api_key)
         end
     end
 
-    if enable_websocket(server_uri, user_id, api_key) then
+    local ws_ok, ws_err = enable_websocket(server_uri, user_id, api_key)
+    if ws_ok then
         Transport.setup_autocommands()
         return true, mode
     end
 
-    log.debug("transport", "websocket setup failed, attempting SSE fallback")
+    local fallback_reason
+    if ws_err == "missing_binary" then
+        fallback_reason = "Websocket proxy binary not available"
+    else
+        fallback_reason = "Websocket setup failed"
+    end
+
+    log.debug("transport", fallback_reason .. ", trying to use SSE")
 
     if enable_sse(server_uri, user_id, api_key) then
         Transport.setup_autocommands()

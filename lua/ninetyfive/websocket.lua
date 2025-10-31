@@ -551,8 +551,13 @@ function Websocket.setup_connection(server_uri, user_id, api_key)
     local binary_path = plugin_root .. binary_suffix
 
     if binary_suffix == "" or vim.fn.filereadable(binary_path) ~= 1 then
-        log.notify("websocket", vim.log.levels.ERROR, true, "Websocket proxy binary not available")
-        return false
+        log.notify(
+            "websocket",
+            vim.log.levels.ERROR,
+            true,
+            "Websocket proxy binary not available; attempting SSE fallback"
+        )
+        return false, "missing_binary"
     end
 
     local base_url = server_uri:gsub("^ws://", "http://"):gsub("^wss://", "https://")
