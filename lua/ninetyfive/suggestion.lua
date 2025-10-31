@@ -203,7 +203,7 @@ suggestion.show = function(completion)
             end
         end
     elseif type(completion) == "string" then
-      parts = { completion }
+        parts = { completion }
     end
 
     local text = table.concat(parts)
@@ -357,15 +357,15 @@ suggestion.accept = function(current_completion)
             if flush_idx then
                 local old_len = #arr
                 local new_len = old_len - flush_idx
-                
+
                 for i = 1, new_len do
                     arr[i] = arr[i + flush_idx]
                 end
-                
+
                 for i = old_len, new_len + 1, -1 do
                     arr[i] = nil
                 end
-                
+
                 if #arr > 0 then
                     has_remaining = true
                 end
@@ -387,7 +387,6 @@ suggestion.accept = function(current_completion)
         end
     end
 end
-
 
 suggestion.clear = function()
     local buffer = vim.api.nvim_get_current_buf()

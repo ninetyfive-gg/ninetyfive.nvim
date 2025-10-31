@@ -1,7 +1,8 @@
 local log = require("ninetyfive.util.log")
-local suggestion = require("ninetyfive.suggestion")
 local completion = require("ninetyfive.completion")
 local git = require("ninetyfive.git")
+local suggestion = require("ninetyfive.suggestion")
+local completion_state = require("ninetyfive.completion_state")
 
 local Websocket = {}
 
@@ -10,32 +11,40 @@ local reconnect_attempts = 0
 local max_reconnect_attempts = 300
 local reconnect_delay = 1000
 
--- Variable to store aggregated ghost text
-local current_completion = nil
-local buffer = nil
-local active_text = nil
+local function get_current_completion()
+    return completion_state.get_current_completion()
+end
+
+local function set_current_completion(value)
+    completion_state.set_current_completion(value)
+end
+
+local function get_buffer()
+    return completion_state.get_buffer()
+end
+
+local function set_buffer(value)
+    completion_state.set_buffer(value)
+end
+
+local function get_active_text()
+    return completion_state.get_active_text()
+end
+
+local function set_active_text(value)
+    completion_state.set_active_text(value)
+end
 
 local home = vim.fn.expand("~")
 local cache_path = home .. "/.ninetyfive/consent.json"
 vim.fn.mkdir(home .. "/.ninetyfive", "p")
 
 function Websocket.has_active()
-    if not current_completion or not current_completion.completion then
-        return false
-    end
-
-    -- scan through the list of parsed items
-    for _, item in ipairs(current_completion.completion) do
-        if item.v and tostring(item.v):match("%S") then
-            return true
-        end
-    end
-
-    return false
+    return completion_state.has_active()
 end
 
 function Websocket.clear()
-    current_completion = nil
+    completion_state.clear()
 end
 
 -- Function to send a message to the websocket
@@ -94,52 +103,54 @@ local function send_file_content()
 end
 
 local function get_indexing_consent(callback)
-  local mode = (_G.Ninetyfive.config.indexing.mode) or "ask"
-  local use_cache = (_G.Ninetyfive.config.indexing.cache_consent) ~= false
+    local mode = _G.Ninetyfive.config.indexing.mode or "ask"
+    local use_cache = _G.Ninetyfive.config.indexing.cache_consent ~= false
 
-  -- check the config and short circuit
-  if mode == "on" then
-    callback(true)
-    return
-  elseif mode == "off" then
-    callback(false)
-    return
-  end
-
-  -- if caching is enabled, check it first
-  if use_cache then
-    local f = io.open(cache_path, "r")
-    if f then
-      local data = f:read("*a")
-      f:close()
-      local ok, parsed = pcall(vim.json.decode, data)
-      if ok and parsed and parsed.consent ~= nil then
-        callback(parsed.consent)
+    -- check the config and short circuit
+    if mode == "on" then
+        callback(true)
         return
-      end
+    elseif mode == "off" then
+        callback(false)
+        return
     end
-  end
 
-  vim.ui.select({ "Allow", "Deny" }, {
-    prompt = "This extension can index your workspace to provide better completions. Would you like to allow this?",
-  }, function(choice)
-    if not choice then return end
-    local consent = (choice == "Allow")
-
-    -- persist it to our cache
+    -- if caching is enabled, check it first
     if use_cache then
-      local ok, out = pcall(vim.json.encode, { consent = consent })
-      if ok then
-        local wf = io.open(cache_path, "w")
-        if wf then
-          wf:write(out)
-          wf:close()
+        local f = io.open(cache_path, "r")
+        if f then
+            local data = f:read("*a")
+            f:close()
+            local ok, parsed = pcall(vim.json.decode, data)
+            if ok and parsed and parsed.consent ~= nil then
+                callback(parsed.consent)
+                return
+            end
         end
-      end
     end
 
-    callback(consent)
-  end)
+    vim.ui.select({ "Allow", "Deny" }, {
+        prompt = "This extension can index your workspace to provide better completions. Would you like to allow this?",
+    }, function(choice)
+        if not choice then
+            return
+        end
+        local consent = (choice == "Allow")
+
+        -- persist it to our cache
+        if use_cache then
+            local ok, out = pcall(vim.json.encode, { consent = consent })
+            if ok then
+                local wf = io.open(cache_path, "w")
+                if wf then
+                    wf:write(out)
+                    wf:close()
+                end
+            end
+        end
+
+        callback(consent)
+    end)
 end
 
 local function set_workspace()
@@ -185,10 +196,10 @@ local function set_workspace()
         local bufnr = vim.api.nvim_get_current_buf()
         local curr_text = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
 
-        if active_text ~= curr_text then
-            active_text = curr_text
+        if get_active_text() ~= curr_text then
+            set_active_text(curr_text)
             send_file_content()
-            current_completion = nil
+            completion_state.clear()
         end
     end
 end
@@ -207,7 +218,7 @@ local function send_file_delta(args)
     local current_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
     local current_content = table.concat(current_lines, "\n")
 
-    local prev = active_text
+    local prev = get_active_text() or ""
     local curr = current_content
 
     -- Find the first differing character
@@ -261,7 +272,7 @@ local function send_file_delta(args)
 end
 
 local function request_completion(args)
-    if current_completion ~= nil then
+    if get_current_completion() ~= nil then
         return
     end
 
@@ -315,7 +326,7 @@ local function request_completion(args)
         -- Generate a request ID
         local request_id = tostring(os.time()) .. "_" .. tostring(math.random(1000, 9999))
 
-        buffer = bufnr
+        set_buffer(bufnr)
 
         local message = vim.json.encode({
             type = "delta-completion-request",
@@ -330,7 +341,7 @@ local function request_completion(args)
             log.debug("websocket", "Failed to send delta-completion-request message")
         end
 
-        current_completion = completion.new(request_id)
+        set_current_completion(completion.new(request_id))
     end)
 
     if not ok then
@@ -338,88 +349,19 @@ local function request_completion(args)
     end
 
     -- Also clear any suggestions that were showing
-    suggestion.clear()
+    completion_state.clear_suggestion()
 end
 
 function Websocket.accept_edit()
-    if current_completion then
-        suggestion.accept_edit(current_completion)
-
-        if current_completion.edit_index > #current_completion.edits then
-            current_completion = nil
-            return
-        end
-
-        -- Check next edit
-        local edit = current_completion:next_edit()
-
-        if not edit then
-            return
-        end
-
-        if edit.text == "" then
-            suggestion.showDeleteSuggestion(edit)
-            current_completion.edit_index = current_completion.edit_index + 1
-        elseif edit.start == edit["end"] then
-            suggestion.showInsertSuggestion(edit.start, edit["end"], edit.text)
-            current_completion.edit_index = current_completion.edit_index + 1
-        else
-            suggestion.showUpdateSuggestion(edit.start, edit["end"], edit.text)
-            current_completion.edit_index = current_completion.edit_index + 1
-        end
-    end
+    completion_state.accept_edit()
 end
 
 function Websocket.accept()
-    if
-        current_completion ~= nil
-        and #current_completion.completion > 0
-        and buffer == vim.api.nvim_get_current_buf()
-    then
-        local bufnr = vim.api.nvim_get_current_buf()
-        vim.b[bufnr].ninetyfive_accepting = true
-
-        local built = {}
-        for _, item in ipairs(current_completion.completion) do
-            if item.v and item.v ~= vim.NIL then
-                table.insert(built, tostring(item.v))
-            end
-        end
-        local accepted_text = table.concat(built)
-
-        suggestion.accept(current_completion)
-        current_completion:consume(#accepted_text)
-
-        local edit = current_completion:next_edit()
-
-        -- Don't even show the edit description if there are no edits
-        if not edit then
-            return
-        end
-        -- After accepting we can process the edits
-        suggestion.showEditDescription(current_completion)
-
-        log.debug("messages", "checking if active")
-
-        current_completion.is_active = true
-
-        if edit.text == "" then
-            suggestion.showDeleteSuggestion(edit)
-        elseif edit.start == edit["end"] then
-            suggestion.showInsertSuggestion(edit.start, edit["end"], edit.text)
-        else
-            suggestion.showUpdateSuggestion(edit.start, edit["end"], edit.text)
-        end
-
-        current_completion.edit_index = current_completion.edit_index + 1
-
-        -- TODO: we only clear the completion once its been consumed, or cancelled...
-    end
+    completion_state.accept()
 end
 
 function Websocket.reject()
-    -- TODO anything to send to the server?
-    suggestion.clear()
+    completion_state.reject()
 end
 
 -- Function to set up autocommands related to websocket functionality
@@ -438,8 +380,8 @@ function Websocket.setup_autocommands()
                 return
             end
 
-            suggestion.clear()
-            current_completion = nil
+            completion_state.clear_suggestion()
+            completion_state.clear()
         end,
     })
 
@@ -460,35 +402,35 @@ function Websocket.setup_autocommands()
                 return
             end
 
-            suggestion.clear()
-            current_completion = nil
+            completion_state.clear_suggestion()
+            completion_state.clear()
 
             vim.schedule(function()
                 local curr_text =
                     table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
-                if active_text == nil then
+                if get_active_text() == nil then
                     send_file_content()
-                    current_completion = nil
+                    completion_state.clear()
                 else
                     send_file_content()
 
                     if
-                        current_completion
-                        and current_completion.is_closed
-                        and current_completion.consumed
-                            == string.len(current_completion.completion)
+                        get_current_completion()
+                        and get_current_completion().is_closed
+                        and get_current_completion().consumed
+                            == get_current_completion():length()
                     then
                         -- we have consumed the completion we're not in edit mode
-                        if not current_completion.is_active then
-                            current_completion = nil
+                        if not get_current_completion().is_active then
+                            completion_state.clear()
                         end
                         --TODO this is missing the edit case
                     else
-                        current_completion = nil
+                        completion_state.clear()
                     end
                 end
 
-                active_text = curr_text
+                set_active_text(curr_text)
 
                 request_completion(args)
             end)
@@ -514,7 +456,7 @@ function Websocket.setup_autocommands()
             if filetype == "oil" then
                 return
             end
-            
+
             local ok, err = pcall(function()
                 -- Check that we're connected
                 if
@@ -544,8 +486,8 @@ function Websocket.setup_autocommands()
     vim.api.nvim_create_autocmd("InsertLeave", {
         callback = function(args)
             -- We dont need to display suggestions when the user leaves insert mode
-            suggestion.clear()
-            current_completion = nil
+            completion_state.clear_suggestion()
+            completion_state.clear()
             vim.b[args.buf].ninetyfive_accepting = false
         end,
     })
@@ -599,20 +541,27 @@ end
 function Websocket.setup_connection(server_uri, user_id, api_key)
     log.debug("websocket", "Setting up websocket connection")
 
-    -- Path to the binary (relative to the plugin directory)
-    -- Get the plugin's root directory in a way that works regardless of where Neovim is opened
+    Websocket.shutdown()
+
     local plugin_root = vim.fn.fnamemodify(
         vim.api.nvim_get_runtime_file("lua/ninetyfive/init.lua", false)[1] or "",
         ":h:h:h"
     )
-    local binary_path = plugin_root .. pick_binary()
+    local binary_suffix = pick_binary()
+    local binary_path = plugin_root .. binary_suffix
 
-    -- Build the websocket URI with query parameters
-    local ws_uri = server_uri .. "?user_id=" .. user_id .. "&editor=neovim"
-
-    if api_key and api_key ~= "" then
-        ws_uri = ws_uri .. "&api_key=" .. api_key
+    if binary_suffix == "" or vim.fn.filereadable(binary_path) ~= 1 then
+        log.notify(
+            "websocket",
+            vim.log.levels.ERROR,
+            true,
+            "Websocket proxy binary not available; attempting SSE fallback"
+        )
+        return false, "missing_binary"
     end
+
+    local base_url = server_uri:gsub("^ws://", "http://"):gsub("^wss://", "https://")
+    local git_endpoint_base = base_url:gsub("/ws$", "")
 
     get_indexing_consent(function(allowed)
         if not allowed then
@@ -626,16 +575,20 @@ function Websocket.setup_connection(server_uri, user_id, api_key)
             vim.defer_fn(function()
                 vim.schedule(function()
                     local ok, err = pcall(function()
-                        local base_url = server_uri:gsub("^ws://", "http://"):gsub("^wss://", "https://")
-                        local git_endpoint = base_url:gsub("/ws$", "") .. "/datasets"
-                        
+                        local git_endpoint = git_endpoint_base .. "/datasets"
+
                         git.sync_current_repo(api_key, git_endpoint, 50) -- limit to 50 commits for now
-                        
+
                         log.debug("websocket", "Git repository sync completed")
                     end)
-                    
+
                     if not ok then
-                        log.notify("websocket", vim.log.levels.ERROR, true, "Failed to sync git repository: " .. tostring(err))
+                        log.notify(
+                            "websocket",
+                            vim.log.levels.ERROR,
+                            true,
+                            "Failed to sync git repository: " .. tostring(err)
+                        )
                     end
                 end)
             end, 2000)
@@ -643,6 +596,13 @@ function Websocket.setup_connection(server_uri, user_id, api_key)
             log.debug("websocket", "No API key provided, skipping git sync")
         end
     end)
+
+    -- Build the websocket URI with query parameters
+    local ws_uri = server_uri .. "?user_id=" .. user_id .. "&editor=neovim"
+
+    if api_key and api_key ~= "" then
+        ws_uri = ws_uri .. "&api_key=" .. api_key
+    end
 
     _G.Ninetyfive.websocket_job = vim.fn.jobstart({
         binary_path,
@@ -696,7 +656,7 @@ function Websocket.setup_connection(server_uri, user_id, api_key)
                             end
                         end
                     else
-                        local c = current_completion
+                        local c = get_current_completion()
                         if c and c.request_id == parsed.r then
                             if parsed.v and parsed.v ~= vim.NIL then
                                 table.insert(c.completion, parsed)
@@ -722,12 +682,7 @@ function Websocket.setup_connection(server_uri, user_id, api_key)
             end
         end,
         on_exit = function(_, exit_code, _)
-            log.notify(
-                "websocket",
-                vim.log.levels.WARN,
-                true,
-                "websocket job exiting..."
-            )
+            log.notify("websocket", vim.log.levels.WARN, true, "websocket job exiting...")
         end,
         stdout_buffered = false,
         stderr_buffered = false,
@@ -744,15 +699,16 @@ function Websocket.setup_connection(server_uri, user_id, api_key)
 end
 
 function Websocket.get_completion()
-    if current_completion == nil then
+    local c = get_current_completion()
+    if c == nil then
         return ""
     end
 
-    return current_completion.completion
+    return c.completion
 end
 
 function Websocket.reset_completion()
-    current_completion = nil
+    completion_state.reset_completion()
 end
 
 return Websocket

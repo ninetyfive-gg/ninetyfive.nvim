@@ -49,6 +49,13 @@ Default values:
           -- Sets a global mapping to reject a suggestion
           reject = "<C-w>",
       },
+
+      indexing = {
+          -- Possible values: "ask" | "on" | "off"
+          mode = "ask",
+          -- Whether to cache the user's answer in /tmp per project
+          cache_consent = true,
+      },
   }
 
 <
@@ -62,6 +69,28 @@ Parameters ~
 
 Usage ~
 `require("ninetyfive").setup()` (add `{}` with your |Ninetyfive.options| table)
+
+
+==============================================================================
+------------------------------------------------------------------------------
+                                                                        *noop()*
+                                 `noop`({...})
+
+------------------------------------------------------------------------------
+                                                                   *ensure_cb()*
+                               `ensure_cb`({cb})
+Parameters ~
+{cb} `(fun(...)|nil)`
+Return ~
+`(fun(...))`
+
+------------------------------------------------------------------------------
+                                                                *uv_run_async()*
+                    `uv_run_async`({cmd}, {cwd}, {callback})
+Parameters ~
+{callback} `(fun(...)|nil)`
+Return ~
+`(fun(...)|nil)`
 
 
  vim:tw=78:ts=8:noet:ft=help:norl:

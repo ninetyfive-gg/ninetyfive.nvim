@@ -2,7 +2,7 @@ local main = require("ninetyfive.main")
 local config = require("ninetyfive.config")
 local log = require("ninetyfive.util.log")
 local state = require("ninetyfive.state")
-local websocket = require("ninetyfive.websocket")
+local transport = require("ninetyfive.transport")
 math.randomseed(os.time())
 
 local Ninetyfive = {}
@@ -56,13 +56,12 @@ function Ninetyfive.toggle()
 
     main.toggle("public_api_toggle")
 
-    -- If the plugin was disabled and is now enabled, set up autocommands and websocket
+    -- If the plugin was disabled and is now enabled, establish transport connection
     if was_disabled and state:get_enabled() then
         local server = _G.Ninetyfive.config.server
-        log.debug("toggle", "Setting up autocommands and websocket after toggle")
-        websocket.setup_autocommands()
+        log.debug("toggle", "Setting up transport after toggle")
         local user_data = get_user_data()
-        websocket.setup_connection(server, user_data.user_id, user_data.api_key)
+        transport.setup_connection(server, user_data.user_id, user_data.api_key)
     end
 end
 
@@ -75,11 +74,8 @@ function Ninetyfive.enable(scope)
     local server = _G.Ninetyfive.config.server
 
     -- Set up autocommands when plugin is enabled
-    websocket.setup_autocommands()
-
     local user_data = get_user_data()
-    -- Set up websocket connection
-    websocket.setup_connection(server, user_data.user_id, user_data.api_key)
+    transport.setup_connection(server, user_data.user_id, user_data.api_key)
 
     main.toggle(scope or "public_api_enable")
 end
@@ -96,11 +92,8 @@ function Ninetyfive.setup(opts)
     if _G.Ninetyfive.config.enable_on_startup then
         local user_data = get_user_data()
         -- Set up autocommands when plugin is enabled
-        websocket.setup_autocommands()
-
         local server = _G.Ninetyfive.config.server
-        -- Set up websocket connection
-        websocket.setup_connection(server, user_data.user_id, user_data.api_key)
+        transport.setup_connection(server, user_data.user_id, user_data.api_key)
     end
 end
 
@@ -135,26 +128,24 @@ function Ninetyfive.setApiKey(api_key)
     vim.fn.writefile({ json_str }, user_data_file)
 
     -- We probably want to reconnect
-    if _G.Ninetyfive and _G.Ninetyfive.websocket_job and _G.Ninetyfive.websocket_job > 0 then
-        vim.fn.jobstop(_G.Ninetyfive.websocket_job)
-        _G.Ninetyfive.websocket_job = nil
-
+    if _G.Ninetyfive and _G.Ninetyfive.config and _G.Ninetyfive.config.server then
         local server = _G.Ninetyfive.config.server
         local user_data = get_user_data()
-        websocket.setup_connection(server, user_data.user_id, user_data.api_key)
+
+        transport.setup_connection(server, user_data.user_id, user_data.api_key)
     end
 end
 
 function Ninetyfive.accept()
-    websocket.accept()
+    transport.accept()
 end
 
 function Ninetyfive.accept_edit(edit)
-    websocket.accept_edit()
+    transport.accept_edit()
 end
 
 function Ninetyfive.reject()
-    websocket.reject()
+    transport.reject()
 end
 
 _G.Ninetyfive = Ninetyfive

@@ -1,5 +1,5 @@
 local log = require("ninetyfive.util.log")
-local websocket = require("ninetyfive.websocket")
+local transport = require("ninetyfive.transport")
 
 local Ninetyfive = {}
 
@@ -78,7 +78,7 @@ local function register_mappings(options, mappings)
         if name == "accept" then
             opts.expr = true
             vim.keymap.set("i", key, function()
-                if websocket.has_active and websocket.has_active() then
+                if transport.has_active and transport.has_active() then
                     return "<Cmd>NinetyFiveAccept<CR>"
                 else
                     return vim.fn.pumvisible() == 1 and "<C-n>" or "<Tab>"
