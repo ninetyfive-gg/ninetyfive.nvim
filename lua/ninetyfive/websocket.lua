@@ -394,7 +394,6 @@ function Websocket.setup_autocommands()
             local bufnr = args.buf
 
             local filetype = vim.bo[bufnr].filetype
-            print(filetype)
 
             if vim.tbl_contains(ignored_filetypes, filetype) then
                 return
