@@ -3,6 +3,8 @@ local config = require("ninetyfive.config")
 local log = require("ninetyfive.util.log")
 local state = require("ninetyfive.state")
 local transport = require("ninetyfive.transport")
+local completion_state = require("ninetyfive.completion_state")
+
 math.randomseed(os.time())
 
 local Ninetyfive = {}
@@ -62,6 +64,9 @@ function Ninetyfive.toggle()
         log.debug("toggle", "Setting up transport after toggle")
         local user_data = get_user_data()
         transport.setup_connection(server, user_data.user_id, user_data.api_key)
+    else
+        transport.shutdown()
+        completion_state.clear()
     end
 end
 

@@ -3,6 +3,7 @@ local completion = require("ninetyfive.completion")
 local git = require("ninetyfive.git")
 local suggestion = require("ninetyfive.suggestion")
 local completion_state = require("ninetyfive.completion_state")
+local state = require("ninetyfive.state")
 
 local Websocket = {}
 
@@ -398,6 +399,11 @@ function Websocket.setup_autocommands()
                 return
             end
 
+            print("ho", state.enabled)
+            if state.enabled == nil or not state.enabled then
+                return
+            end
+
             if vim.b[bufnr].ninetyfive_accepting then
                 return
             end
@@ -454,6 +460,11 @@ function Websocket.setup_autocommands()
 
             -- We do not want to trigger when people are in the oil.nvim buffer
             if filetype == "oil" then
+                return
+            end
+            
+            print("hi", state.enabled)
+            if state.enabled == nil or not state.enabled then
                 return
             end
 
