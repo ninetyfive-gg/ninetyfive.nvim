@@ -3,6 +3,8 @@ local config = require("ninetyfive.config")
 local log = require("ninetyfive.util.log")
 local state = require("ninetyfive.state")
 local transport = require("ninetyfive.transport")
+local completion_state = require("ninetyfive.completion_state")
+
 math.randomseed(os.time())
 
 local Ninetyfive = {}
@@ -62,6 +64,9 @@ function Ninetyfive.toggle()
         log.debug("toggle", "Setting up transport after toggle")
         local user_data = get_user_data()
         transport.setup_connection(server, user_data.user_id, user_data.api_key)
+    else
+        transport.shutdown()
+        completion_state.clear()
     end
 end
 
@@ -90,6 +95,8 @@ function Ninetyfive.setup(opts)
     _G.Ninetyfive.config = config.setup(opts)
 
     if _G.Ninetyfive.config.enable_on_startup then
+        -- We make sure we enable, since the default value for 'state' is disabled
+        main.enable("public_api_enable")
         local user_data = get_user_data()
         -- Set up autocommands when plugin is enabled
         local server = _G.Ninetyfive.config.server

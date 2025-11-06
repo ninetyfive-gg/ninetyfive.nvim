@@ -429,6 +429,10 @@ function Sse.setup_autocommands()
                 return
             end
 
+            if state.enabled == nil or not state.enabled then
+                return
+            end
+
             if vim.b[bufnr].ninetyfive_accepting then
                 return
             end
@@ -453,6 +457,10 @@ function Sse.setup_autocommands()
             local filetype = vim.bo[bufnr].filetype
 
             if filetype == "oil" then
+                return
+            end
+
+            if state.enabled == nil or not state.enabled then
                 return
             end
 

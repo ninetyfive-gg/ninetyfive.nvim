@@ -86,13 +86,13 @@ All available configuration options with their default values:
 require("ninetyfive").setup({
   -- Prints useful logs about what events are triggered, and reasons actions are executed
   debug = false,
-  
+
   -- When `true`, enables the plugin on NeoVim startup
   enable_on_startup = true,
-  
+
   -- Update server URI, mostly for debugging
   server = "wss://api.ninetyfive.gg",
-  
+
   -- Key mappings configuration
   mappings = {
     -- When `true`, creates all the mappings set
@@ -104,7 +104,7 @@ require("ninetyfive").setup({
     -- Sets a global mapping to reject a suggestion
     reject = "<C-w>",
   },
-  
+
   -- Code indexing configuration for better completions
   indexing = {
     -- Possible values: "ask" | "on" | "off"
@@ -197,7 +197,7 @@ return {
 }
 ```
 
-*Note*: all NinetyFive cache is stored at `~/.ninetyfive/`
+_Note_: all NinetyFive cache is stored at `~/.ninetyfive/`
 
 ### Pulling latest plugin code using nvim + Lazy
 
@@ -205,14 +205,13 @@ We don't have versioning in the plugin yet, so we need to pull the latest code u
 
 Run `:Lazy update ninetyfive` within neovim to pull the latest commits from main.
 
-
 ## Commands
 
-| Command               | Description                    |
-| --------------------- | ------------------------------ |
-| `:NinetyFive`         | Enables the plugin.            |
-| `:NinetyFivePurchase` | Redirects to the purchase page |
-| `:NinetyFiveKey`      | Provide an API key             |
+| Command               | Description                                  |
+| --------------------- | -------------------------------------------- |
+| `:NinetyFive`         | Toggles the plugin (for the current session) |
+| `:NinetyFivePurchase` | Redirects to the purchase page               |
+| `:NinetyFiveKey`      | Provide an API key                           |
 
 ## Development
 
