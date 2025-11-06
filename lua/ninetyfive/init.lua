@@ -95,6 +95,8 @@ function Ninetyfive.setup(opts)
     _G.Ninetyfive.config = config.setup(opts)
 
     if _G.Ninetyfive.config.enable_on_startup then
+        -- We make sure we enable, since the default value for 'state' is disabled
+        main.enable("public_api_enable")
         local user_data = get_user_data()
         -- Set up autocommands when plugin is enabled
         local server = _G.Ninetyfive.config.server

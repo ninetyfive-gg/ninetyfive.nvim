@@ -399,7 +399,6 @@ function Websocket.setup_autocommands()
                 return
             end
 
-            print("ho", state.enabled)
             if state.enabled == nil or not state.enabled then
                 return
             end
@@ -463,7 +462,6 @@ function Websocket.setup_autocommands()
                 return
             end
             
-            print("hi", state.enabled)
             if state.enabled == nil or not state.enabled then
                 return
             end
