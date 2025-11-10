@@ -5,6 +5,7 @@ local suggestion = require("ninetyfive.suggestion")
 local completion_state = require("ninetyfive.completion_state")
 local state = require("ninetyfive.state")
 local ignored_filetypes = require("ninetyfive.ignored_filetypes")
+local plugin_version = require("ninetyfive.version")
 
 local Websocket = {}
 
@@ -606,7 +607,12 @@ function Websocket.setup_connection(server_uri, user_id, api_key)
     end)
 
     -- Build the websocket URI with query parameters
-    local ws_uri = server_uri .. "?user_id=" .. user_id .. "&editor=neovim"
+    local ws_uri = server_uri
+        .. "?user_id="
+        .. user_id
+        .. "&editor=neovim"
+        .. "&version="
+        .. tostring(plugin_version)
 
     if api_key and api_key ~= "" then
         ws_uri = ws_uri .. "&api_key=" .. api_key
