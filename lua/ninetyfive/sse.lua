@@ -4,6 +4,7 @@ local completion = require("ninetyfive.completion")
 local git = require("ninetyfive.git")
 local completion_state = require("ninetyfive.completion_state")
 local ignored_filetypes = require("ninetyfive.ignored_filetypes")
+local global_state = require("ninetyfive.state")
 
 local Sse = {}
 
@@ -430,7 +431,7 @@ function Sse.setup_autocommands()
                 return
             end
 
-            if state.enabled == nil or not state.enabled then
+            if not global_state:get_enabled() then
                 return
             end
 
@@ -461,7 +462,7 @@ function Sse.setup_autocommands()
                 return
             end
 
-            if state.enabled == nil or not state.enabled then
+            if not global_state:get_enabled() then
                 return
             end
 
