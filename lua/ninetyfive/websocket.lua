@@ -400,7 +400,7 @@ function Websocket.setup_autocommands()
                 return
             end
 
-            if state.enabled == nil or not state.enabled then
+            if not state:get_enabled() then
                 return
             end
 
@@ -462,7 +462,7 @@ function Websocket.setup_autocommands()
                 return
             end
 
-            if state.enabled == nil or not state.enabled then
+            if not state:get_enabled() then
                 return
             end
 
