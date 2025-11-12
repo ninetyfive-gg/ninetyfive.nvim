@@ -90,16 +90,16 @@ local function send_file_content()
     local bufname = vim.api.nvim_buf_get_name(bufnr)
     local content = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
 
+    local message = vim.json.encode({
+        type = "file-content",
+        path = bufname,
+        text = content,
+    })
+
     git.is_ignored(bufname, function(ignored)
         if ignored then
             return
         end
-
-        local message = vim.json.encode({
-            type = "file-content",
-            path = bufname,
-            text = content,
-        })
 
         vim.schedule(function()
             if not Websocket.send_message(message) then
