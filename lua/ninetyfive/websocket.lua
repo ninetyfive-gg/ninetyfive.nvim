@@ -71,7 +71,6 @@ function Websocket.send_message(message)
     -- Handle any errors that occurred
     if not ok then
         -- log.debug("websocket", "Error sending message: " .. tostring(result))
-        print(result)
         return false
     end
 
@@ -347,10 +346,8 @@ local function request_completion(args)
 
             log.debug("messages", "-> [delta-completion-request]", request_id, repo, pos)
 
-            print("hello")
             vim.schedule(function()
                 if not Websocket.send_message(message) then
-                    print("fail")
                     log.debug("websocket", "Failed to send delta-completion-request message")
                 end
 
