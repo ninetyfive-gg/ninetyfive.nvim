@@ -71,6 +71,7 @@ function Websocket.send_message(message)
     -- Handle any errors that occurred
     if not ok then
         -- log.debug("websocket", "Error sending message: " .. tostring(result))
+        print(result)
         return false
     end
 
@@ -89,20 +90,23 @@ local function send_file_content()
     local bufname = vim.api.nvim_buf_get_name(bufnr)
     local content = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
 
-    if git.is_ignored(bufname) then
-        log.debug("websocket", "skipping file-content message - file is git ignored")
-        return
-    end
+    git.is_ignored(bufname, function(ignored)
+        if ignored then
+            return
+        end
 
-    local message = vim.json.encode({
-        type = "file-content",
-        path = bufname,
-        text = content,
-    })
+        local message = vim.json.encode({
+            type = "file-content",
+            path = bufname,
+            text = content,
+        })
 
-    if not Websocket.send_message(message) then
-        log.debug("websocket", "Failed to send file-content message")
-    end
+        vim.schedule(function()
+            if not Websocket.send_message(message) then
+                log.debug("websocket", "Failed to send file-content message")
+            end
+        end)
+    end)
 end
 
 local function get_indexing_consent(callback)
@@ -291,60 +295,68 @@ local function request_completion(args)
         local bufnr = args.buf
         local bufname = vim.api.nvim_buf_get_name(bufnr)
 
-        if git.is_ignored(bufname) then
-            log.debug("websocket", "Skipping delta-completion-request - file is git ignored")
-            return
-        end
         local cursor = vim.api.nvim_win_get_cursor(0)
         local line = cursor[1] - 1 -- Lua uses 0-based indexing for lines
         local col = cursor[2] -- Column is 0-based
 
         -- Get buffer content from start to cursor position
         local lines = vim.api.nvim_buf_get_lines(bufnr, 0, line + 1, false)
-        -- Adjust the last line to only include content up to the cursor
-        if #lines > 0 then
-            lines[#lines] = string.sub(lines[#lines], 1, col)
-        end
-        local content_to_cursor = table.concat(lines, "\n")
+        local cwd = vim.fn.getcwd()
 
-        -- Get byte position (length of content in bytes)
-        local pos = #content_to_cursor
-
-        -- Repo is the cwd? Is this generally correct with how people use neovim?
-        local git_root = git.get_repo_root()
-        local repo = "unknown"
-        if git_root then
-            local repo_match = string.match(git_root, "/([^/]+)$")
-            if repo_match then
-                repo = repo_match
+        git.is_ignored(bufname, function(ignored)
+            if ignored then
+                log.debug("websocket", "Skipping delta-completion-request - file is git ignored")
+                return
             end
-        else
-            local cwd = vim.fn.getcwd()
-            local repo_match = string.match(cwd, "/([^/]+)$")
-            if repo_match then
-                repo = repo_match
+
+            -- Adjust the last line to only include content up to the cursor
+            if #lines > 0 then
+                lines[#lines] = string.sub(lines[#lines], 1, col)
             end
-        end
+            local content_to_cursor = table.concat(lines, "\n")
 
-        -- Generate a request ID
-        local request_id = tostring(os.time()) .. "_" .. tostring(math.random(1000, 9999))
+            -- Get byte position (length of content in bytes)
+            local pos = #content_to_cursor
 
-        set_buffer(bufnr)
+            -- Repo is the cwd? Is this generally correct with how people use neovim?
+            local git_root = git.get_repo_root()
+            local repo = "unknown"
+            if git_root then
+                local repo_match = string.match(git_root, "/([^/]+)$")
+                if repo_match then
+                    repo = repo_match
+                end
+            else
+                local repo_match = string.match(cwd, "/([^/]+)$")
+                if repo_match then
+                    repo = repo_match
+                end
+            end
 
-        local message = vim.json.encode({
-            type = "delta-completion-request",
-            requestId = request_id,
-            repo = repo,
-            pos = pos,
-        })
+            -- Generate a request ID
+            local request_id = tostring(os.time()) .. "_" .. tostring(math.random(1000, 9999))
 
-        log.debug("messages", "-> [delta-completion-request]", request_id, repo, pos)
+            set_buffer(bufnr)
 
-        if not Websocket.send_message(message) then
-            log.debug("websocket", "Failed to send delta-completion-request message")
-        end
+            local message = vim.json.encode({
+                type = "delta-completion-request",
+                requestId = request_id,
+                repo = repo,
+                pos = pos,
+            })
 
-        set_current_completion(completion.new(request_id))
+            log.debug("messages", "-> [delta-completion-request]", request_id, repo, pos)
+
+            print("hello")
+            vim.schedule(function()
+                if not Websocket.send_message(message) then
+                    print("fail")
+                    log.debug("websocket", "Failed to send delta-completion-request message")
+                end
+
+                set_current_completion(completion.new(request_id))
+            end)
+        end)
     end)
 
     if not ok then
