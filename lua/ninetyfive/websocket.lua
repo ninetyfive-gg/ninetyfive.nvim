@@ -566,6 +566,9 @@ function Websocket.setup_connection(server_uri, user_id, api_key)
 
     Websocket.shutdown()
 
+    local uname = vim.loop.os_uname()
+    local sysname = uname and uname.sysname or ""
+
     local plugin_root = vim.fn.fnamemodify(
         vim.api.nvim_get_runtime_file("lua/ninetyfive/init.lua", false)[1] or "",
         ":h:h:h"
