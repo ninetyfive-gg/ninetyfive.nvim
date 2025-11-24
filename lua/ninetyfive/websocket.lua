@@ -533,8 +533,8 @@ local function pick_binary()
             default = "/dist/go-ws-proxy-linux-arm64",
         },
         windows = {
-            x86_64 = "/dist/go-ws-proxy-windows-amd64",
-            default = "/dist/go-ws-proxy-windows-arm64",
+            x86_64 = "/dist/go-ws-proxy-windows-amd64.exe",
+            default = "/dist/go-ws-proxy-windows-arm64.exe",
         },
     }
 
@@ -573,7 +573,21 @@ function Websocket.setup_connection(server_uri, user_id, api_key)
     local binary_suffix = pick_binary()
     local binary_path = plugin_root .. binary_suffix
 
-    if binary_suffix == "" or vim.fn.filereadable(binary_path) ~= 1 then
+    if
+        (vim.fn.has("win32") == 1 or vim.fn.has("win64") == 1 or sysname:lower():find("windows"))
+        and vim.fn.filereadable(binary_path) ~= 1
+    then
+        local exe_path = binary_path .. ".exe"
+        if vim.fn.filereadable(exe_path) == 1 then
+            binary_path = exe_path
+        end
+    end
+
+    if
+        binary_suffix == ""
+        or vim.fn.filereadable(binary_path) ~= 1
+        or vim.fn.executable(binary_path) ~= 1
+    then
         log.notify(
             "websocket",
             vim.log.levels.ERROR,
