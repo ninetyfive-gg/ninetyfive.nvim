@@ -121,6 +121,11 @@ local function get_indexing_consent(callback)
         return
     end
 
+    if #vim.api.nvim_list_uis() == 0 then
+        callback(false)
+        return
+    end
+
     -- if caching is enabled, check it first
     if use_cache then
         local f = io.open(cache_path, "r")

@@ -39,6 +39,29 @@ jobs:
         run: |
           choco install -y neovim curl
 
+      - name: Resolve Neovim path (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          $candidates = @(
+            "C:\Program Files\Neovim\bin\nvim.exe",
+            "C:\ProgramData\chocolatey\lib\neovim\tools\neovim\bin\nvim.exe",
+            "C:\ProgramData\chocolatey\lib\neovim\tools\nvim-win64\bin\nvim.exe",
+            "C:\ProgramData\chocolatey\bin\nvim.exe"
+          )
+          foreach ($c in $candidates) {
+            if (Test-Path $c) {
+              echo "NEOVIM_BIN=$c" >> $env:GITHUB_ENV
+              exit 0
+            }
+          }
+          $found = Get-ChildItem -Path "C:\ProgramData\chocolatey\lib\neovim" -Recurse -Filter nvim.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($found) {
+            echo "NEOVIM_BIN=$($found.FullName)" >> $env:GITHUB_ENV
+            exit 0
+          }
+          Write-Error "nvim.exe not found after installation"
+
       - name: Fetch test deps
         shell: bash
         run: |
@@ -61,9 +84,9 @@ jobs:
         if: runner.os == 'Windows'
         shell: powershell
         run: |
-          $env:PATH = "C:\ProgramData\chocolatey\bin;C:\Program Files\Neovim\bin;$env:PATH"
-          nvim --version
-          nvim --headless --noplugin -u scripts/minimal_init.lua `
+          $bin = if ($env:NEOVIM_BIN) { $env:NEOVIM_BIN } else { "nvim" }
+          & $bin --version
+          & $bin --headless --noplugin -u scripts/minimal_init.lua `
             -c "lua require('mini.test').setup()" `
             -c "lua MiniTest.run({ execute = { reporter = MiniTest.gen_reporter.stdout({ group_depth = 2 }) } })" `
             -c "qa!"
