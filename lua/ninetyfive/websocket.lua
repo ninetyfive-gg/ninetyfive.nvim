@@ -121,6 +121,11 @@ local function get_indexing_consent(callback)
         return
     end
 
+    if #vim.api.nvim_list_uis() == 0 then
+        callback(false)
+        return
+    end
+
     -- if caching is enabled, check it first
     if use_cache then
         local f = io.open(cache_path, "r")
@@ -528,8 +533,8 @@ local function pick_binary()
             default = "/dist/go-ws-proxy-linux-arm64",
         },
         windows = {
-            x86_64 = "/dist/go-ws-proxy-windows-amd64",
-            default = "/dist/go-ws-proxy-windows-arm64",
+            x86_64 = "/dist/go-ws-proxy-windows-amd64.exe",
+            default = "/dist/go-ws-proxy-windows-arm64.exe",
         },
     }
 
@@ -540,8 +545,8 @@ local function pick_binary()
         return binaries[sysname]
     end
 
-    if vim.fn.has("win32") == 1 or vim.fn.has("win64") == 1 then
-        return binaries.windows
+    if vim.fn.has("win32") == 1 or vim.fn.has("win64") == 1 or sysname:lower():find("windows") then
+        return binaries.windows[arch] or binaries.windows.default or ""
     end
 
     return ""
@@ -561,6 +566,9 @@ function Websocket.setup_connection(server_uri, user_id, api_key)
 
     Websocket.shutdown()
 
+    local uname = vim.loop.os_uname()
+    local sysname = uname and uname.sysname or ""
+
     local plugin_root = vim.fn.fnamemodify(
         vim.api.nvim_get_runtime_file("lua/ninetyfive/init.lua", false)[1] or "",
         ":h:h:h"
@@ -568,7 +576,21 @@ function Websocket.setup_connection(server_uri, user_id, api_key)
     local binary_suffix = pick_binary()
     local binary_path = plugin_root .. binary_suffix
 
-    if binary_suffix == "" or vim.fn.filereadable(binary_path) ~= 1 then
+    if
+        (vim.fn.has("win32") == 1 or vim.fn.has("win64") == 1 or sysname:lower():find("windows"))
+        and vim.fn.filereadable(binary_path) ~= 1
+    then
+        local exe_path = binary_path .. ".exe"
+        if vim.fn.filereadable(exe_path) == 1 then
+            binary_path = exe_path
+        end
+    end
+
+    if
+        binary_suffix == ""
+        or vim.fn.filereadable(binary_path) ~= 1
+        or vim.fn.executable(binary_path) ~= 1
+    then
         log.notify(
             "websocket",
             vim.log.levels.ERROR,

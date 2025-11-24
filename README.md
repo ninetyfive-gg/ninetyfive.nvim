@@ -74,7 +74,10 @@ require("lazy").setup({"ninetyfive-gg/ninetyfive.nvim"})
 
 ## Dependencies
 
-This module uses native `curl`. Ensure curl is installed on your system before installing the plugin.
+This module prefers native `libcurl` via LuaJIT FFI (for TLS session reuse) when available and falls back to the `curl` CLI. For best results:
+- Linux: make sure `libcurl.so` is installed (most distros ship it).
+- macOS: use a modern libcurl (e.g., via Homebrew); the system one is often old.
+- Windows: if no system libcurl is found, the plugin will fall back to a bundled/installed `curl` executable.
 
 ## Configuration
 

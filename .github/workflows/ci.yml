@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      TERM: xterm-256color
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Neovim (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y software-properties-common
+          sudo add-apt-repository -y ppa:neovim-ppa/stable
+          sudo apt-get update
+          sudo apt-get install -y neovim curl git
+
+      - name: Install Neovim (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew update
+          brew install neovim curl
+
+      - name: Install Neovim (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          choco install -y neovim curl
+
+      - name: Resolve Neovim path (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          $env:PATH = "C:\tools\neovim\nvim-win64\bin;$env:PATH"
+          $nvim = Get-Command nvim -ErrorAction SilentlyContinue
+          if ($nvim) {
+            echo "NEOVIM_BIN=$($nvim.Source)" >> $env:GITHUB_ENV
+          } else {
+            Write-Error "nvim.exe not found after installation"
+          }
+
+      - name: Fetch test deps
+        shell: bash
+        run: |
+          mkdir -p deps
+          if [ ! -d deps/mini.nvim ]; then
+            git clone --depth 1 https://github.com/echasnovski/mini.nvim deps/mini.nvim
+          fi
+
+      - name: Run tests (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          nvim --version
+          nvim --headless --noplugin -u ./scripts/minimal_init.lua \
+            -c "lua require('mini.test').setup()" \
+            -c "lua MiniTest.run({ execute = { reporter = MiniTest.gen_reporter.stdout({ group_depth = 2 }) } })" \
+            -c "qa!"
+
+      - name: Run tests (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          $bin = if ($env:NEOVIM_BIN) { $env:NEOVIM_BIN } else { "nvim" }
+          & $bin --version
+          & $bin --headless --noplugin -u scripts/minimal_init.lua `
+            -c "lua require('mini.test').setup()" `
+            -c "lua MiniTest.run({ execute = { reporter = MiniTest.gen_reporter.stdout({ group_depth = 2 }) } })" `
+            -c "qa!"
