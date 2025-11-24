@@ -74,7 +74,10 @@ require("lazy").setup({"ninetyfive-gg/ninetyfive.nvim"})
 
 ## Dependencies
 
-This module prefers native `libcurl` via LuaJIT FFI (for TLS session reuse) when available and falls back to the `curl` CLI. For best results:
+There is a websocket adapter shipped in `dist/` for all platforms. If you do not wish to run untrusted binaries,
+you can delete the `dist/` directory entirely. In that case, we will fall back to `libcurl` via LuaJIT FFI when
+available and `curl` CLI if it's not available. For best results:
+
 - Linux: make sure `libcurl.so` is installed (most distros ship it).
 - macOS: use a modern libcurl (e.g., via Homebrew); the system one is often old.
 - Windows: if no system libcurl is found, the plugin will fall back to a bundled/installed `curl` executable.
