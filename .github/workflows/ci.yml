@@ -61,7 +61,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: powershell
         run: |
-          $env:PATH = "C:\Program Files\Neovim\bin;$env:PATH"
+          $env:PATH = "C:\ProgramData\chocolatey\bin;C:\Program Files\Neovim\bin;$env:PATH"
           nvim --version
           nvim --headless --noplugin -u scripts/minimal_init.lua `
             -c "lua require('mini.test').setup()" `
