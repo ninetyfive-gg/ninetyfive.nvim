@@ -545,8 +545,8 @@ local function pick_binary()
         return binaries[sysname]
     end
 
-    if vim.fn.has("win32") == 1 or vim.fn.has("win64") == 1 then
-        return binaries.windows
+    if vim.fn.has("win32") == 1 or vim.fn.has("win64") == 1 or sysname:lower():find("windows") then
+        return binaries.windows[arch] or binaries.windows.default or ""
     end
 
     return ""
