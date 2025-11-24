@@ -7,22 +7,61 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      TERM: xterm-256color
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install dependencies
+      - name: Install Neovim (Ubuntu)
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y software-properties-common
           sudo add-apt-repository -y ppa:neovim-ppa/stable
           sudo apt-get update
-          sudo apt-get install -y neovim lua5.1 liblua5.1-0 lua-bitop lua-luv curl git
+          sudo apt-get install -y neovim curl git
 
-      - name: Install Lua deps
-        run: make deps
+      - name: Install Neovim (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew update
+          brew install neovim curl
 
-      - name: Run tests
-        env:
-          TERM: xterm-256color
-        run: make test
+      - name: Install Neovim (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          choco install -y neovim curl
+
+      - name: Fetch test deps
+        shell: bash
+        run: |
+          mkdir -p deps
+          if [ ! -d deps/mini.nvim ]; then
+            git clone --depth 1 https://github.com/echasnovski/mini.nvim deps/mini.nvim
+          fi
+
+      - name: Run tests (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          nvim --version
+          nvim --headless --noplugin -u ./scripts/minimal_init.lua \
+            -c "lua require('mini.test').setup()" \
+            -c "lua MiniTest.run({ execute = { reporter = MiniTest.gen_reporter.stdout({ group_depth = 2 }) } })"
+
+      - name: Run tests (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          $env:PATH = "C:\Program Files\Neovim\bin;$env:PATH"
+          nvim --version
+          nvim --headless --noplugin -u scripts/minimal_init.lua `
+            -c "lua require('mini.test').setup()" `
+            -c "lua MiniTest.run({ execute = { reporter = MiniTest.gen_reporter.stdout({ group_depth = 2 }) } })"
