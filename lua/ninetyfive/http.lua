@@ -74,6 +74,7 @@ if ok_ffi then
 
         local CURLOPT_URL = 10002
         local CURLOPT_POSTFIELDS = 10015
+        local CURLOPT_COPYPOSTFIELDS = 10165
         local CURLOPT_POSTFIELDSIZE = 60
         local CURLOPT_HTTPHEADER = 10023
         local CURLOPT_USERAGENT = 10018
@@ -139,8 +140,7 @@ if ok_ffi then
             curl.curl_easy_setopt(easy, CURLOPT_USERAGENT, "ninetyfive.nvim")
             curl.curl_easy_setopt(easy, CURLOPT_HTTPHEADER, header_list)
             curl.curl_easy_setopt(easy, CURLOPT_ACCEPT_ENCODING, "")
-            curl.curl_easy_setopt(easy, CURLOPT_POSTFIELDS, body)
-            curl.curl_easy_setopt(easy, CURLOPT_POSTFIELDSIZE, #body)
+            curl.curl_easy_setopt(easy, CURLOPT_COPYPOSTFIELDS, body)
             curl.curl_easy_setopt(easy, CURLOPT_WRITEFUNCTION, write_cb)
             curl.curl_easy_setopt(easy, CURLOPT_WRITEDATA, nil)
             curl.curl_easy_setopt(easy, CURLOPT_SHARE, shared_handle)

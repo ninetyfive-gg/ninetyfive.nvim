@@ -143,4 +143,43 @@ T["libcurl flag reflects availability"] = function()
     MiniTest.expect.equality(type(has_libcurl), "boolean")
 end
 
+T["makes real HTTP request with libcurl without crashing"] = function()
+    reset_http_module()
+
+    -- Skip if libcurl is not available
+    local has_libcurl = eval_lua("http.libcurl_available()")
+    if not has_libcurl then
+        MiniTest.skip("libcurl not available")
+        return
+    end
+
+    -- Make multiple real HTTP requests to trigger potential GC issues
+    child.lua([[
+        local results = {}
+        for i = 1, 3 do
+            -- Create some garbage to encourage GC
+            for j = 1, 100 do
+                local _ = string.rep("x", 1000)
+            end
+            collectgarbage("collect")
+
+            local ok, status, body = http.post_json(
+                "https://httpbin.org/post",
+                { "Content-Type: application/json" },
+                vim.json.encode({ test = "data", iteration = i })
+            )
+            table.insert(results, { ok = ok, status = status, has_body = body ~= nil and #body > 0 })
+        end
+        _G.results = results
+    ]])
+
+    local results = eval_lua("_G.results")
+    -- Verify all requests succeeded
+    for i, result in ipairs(results) do
+        MiniTest.expect.equality(result.ok, true, "Request " .. i .. " should succeed")
+        MiniTest.expect.equality(result.status, 200, "Request " .. i .. " should return 200")
+        MiniTest.expect.equality(result.has_body, true, "Request " .. i .. " should have response body")
+    end
+end
+
 return T
