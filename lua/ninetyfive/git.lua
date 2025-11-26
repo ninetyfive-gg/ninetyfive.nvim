@@ -492,26 +492,27 @@ function git.send_blobs_to_endpoint(job_data, api_key, endpoint_url, callback)
             "x-api-key: " .. api_key,
         }
 
-        local ok, status, err_or_body = http.post_json(endpoint_url, headers, json_payload)
-        if not ok or (status and status >= 400) then
-            log.debug(
-                "git",
-                "request failed for chunk %d/%d (status=%s, err=%s)",
-                chunk_number,
-                total_chunks,
-                tostring(status),
-                tostring(err_or_body)
-            )
-            callback(false)
-            return
-        end
+        http.post_json(endpoint_url, headers, json_payload, function(ok, status, err_or_body)
+            if not ok or (status and status >= 400) then
+                log.debug(
+                    "git",
+                    "request failed for chunk %d/%d (status=%s, err=%s)",
+                    chunk_number,
+                    total_chunks,
+                    tostring(status),
+                    tostring(err_or_body)
+                )
+                callback(false)
+                return
+            end
 
-        i = end_idx + 1
-        if i <= #blobs then
-            vim.defer_fn(send_next, 100)
-        else
-            callback(true)
-        end
+            i = end_idx + 1
+            if i <= #blobs then
+                vim.defer_fn(send_next, 100)
+            else
+                callback(true)
+            end
+        end)
     end
 
     send_next()

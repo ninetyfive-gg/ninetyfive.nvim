@@ -1,16 +1,18 @@
-local log = require("ninetyfive.util.log")
+local uv = vim.uv or vim.loop
 
 local M = {
     using_libcurl = false,
     reason = nil,
-    _post_impl = nil,
 }
 
 local ok_ffi, ffi = pcall(require, "ffi")
 
 -- Try loading libcurl via LuaJIT FFI so we can reuse TLS sessions between requests.
+-- Uses curl_multi for async non-blocking I/O integrated with libuv.
 -- Falls back to spawning the curl CLI if FFI/libcurl is unavailable.
 local curl
+local curl_state
+
 if ok_ffi then
     local lib_names = {
         "libcurl.so.4",
@@ -25,17 +27,30 @@ if ok_ffi then
 
     ffi.cdef([[
     typedef void CURL;
+    typedef void CURLM;
     typedef void CURLSH;
     typedef int CURLcode;
+    typedef int CURLMcode;
     typedef int CURLINFO;
     typedef int CURLSHcode;
     typedef int CURLSHoption;
     typedef int curl_socket_t;
     typedef size_t (*curl_write_callback)(char *ptr, size_t size, size_t nmemb, void *userdata);
+    typedef int (*curl_socket_callback)(CURL *easy, curl_socket_t s, int what, void *userp, void *socketp);
+    typedef int (*curl_multi_timer_callback)(CURLM *multi, long timeout_ms, void *userp);
 
     struct curl_slist {
         char *data;
         struct curl_slist *next;
+    };
+
+    struct CURLMsg {
+        int msg;
+        CURL *easy_handle;
+        union {
+            void *whatever;
+            CURLcode result;
+        } data;
     };
 
     CURLcode curl_global_init(long flags);
@@ -43,6 +58,7 @@ if ok_ffi then
     const char *curl_easy_strerror(CURLcode);
 
     CURL *curl_easy_init(void);
+    void curl_easy_reset(CURL *curl);
     CURLcode curl_easy_setopt(CURL *curl, int option, ...);
     CURLcode curl_easy_perform(CURL *curl);
     CURLcode curl_easy_getinfo(CURL *curl, CURLINFO info, ...);
@@ -54,6 +70,15 @@ if ok_ffi then
     CURLSH *curl_share_init(void);
     CURLSHcode curl_share_setopt(CURLSH *sh, CURLSHoption option, ...);
     CURLSHcode curl_share_cleanup(CURLSH *sh);
+
+    CURLM *curl_multi_init(void);
+    CURLMcode curl_multi_cleanup(CURLM *multi);
+    CURLMcode curl_multi_add_handle(CURLM *multi, CURL *easy);
+    CURLMcode curl_multi_remove_handle(CURLM *multi, CURL *easy);
+    CURLMcode curl_multi_setopt(CURLM *multi, int option, ...);
+    CURLMcode curl_multi_socket_action(CURLM *multi, curl_socket_t s, int ev_bitmask, int *running_handles);
+    CURLMcode curl_multi_assign(CURLM *multi, curl_socket_t s, void *sockp);
+    struct CURLMsg *curl_multi_info_read(CURLM *multi, int *msgs_in_queue);
     ]])
 
     local function try_load()
@@ -69,13 +94,11 @@ if ok_ffi then
     curl, M.reason = try_load()
 
     if curl then
-        -- Copied numeric constants from curl/curl.h to avoid relying on headers at runtime.
+        -- Constants from curl/curl.h
         local CURL_GLOBAL_DEFAULT = 3
 
         local CURLOPT_URL = 10002
-        local CURLOPT_POSTFIELDS = 10015
         local CURLOPT_COPYPOSTFIELDS = 10165
-        local CURLOPT_POSTFIELDSIZE = 60
         local CURLOPT_HTTPHEADER = 10023
         local CURLOPT_USERAGENT = 10018
         local CURLOPT_FOLLOWLOCATION = 52
@@ -85,138 +108,397 @@ if ok_ffi then
         local CURLOPT_WRITEDATA = 10001
         local CURLOPT_ACCEPT_ENCODING = 10102
         local CURLOPT_SHARE = 10100
+        local CURLOPT_TIMEOUT = 13
+        local CURLOPT_CONNECTTIMEOUT = 78
+
+        local CURLMOPT_SOCKETFUNCTION = 20001
+        local CURLMOPT_TIMERFUNCTION = 20004
 
         local CURLINFO_RESPONSE_CODE = 0x200002
 
         local CURLSHOPT_SHARE = 1
         local CURL_LOCK_DATA_SSL_SESSION = 4
 
+        local CURL_SOCKET_TIMEOUT = -1
+        local CURL_POLL_IN = 1
+        local CURL_POLL_OUT = 2
+        local CURL_POLL_REMOVE = 4
+
+        local CURLMSG_DONE = 1
+
         local global_inited = curl.curl_global_init(CURL_GLOBAL_DEFAULT) == 0
-        local shared_handle = global_inited and curl.curl_share_init() or nil
-        if shared_handle then
-            curl.curl_share_setopt(shared_handle, CURLSHOPT_SHARE, CURL_LOCK_DATA_SSL_SESSION)
+        if not global_inited then
+            M.reason = "curl_global_init failed"
         else
-            M.reason = "failed to init curl share handle"
-        end
+            local shared_handle = curl.curl_share_init()
+            if not shared_handle then
+                M.reason = "failed to init curl share handle"
+            else
+                curl.curl_share_setopt(shared_handle, CURLSHOPT_SHARE, CURL_LOCK_DATA_SSL_SESSION)
 
-        local easy = (global_inited and curl.curl_easy_init()) or nil
+                local multi = curl.curl_multi_init()
+                if not multi then
+                    M.reason = "failed to init curl multi handle"
+                else
+                    -- State for async operations
+                    curl_state = {
+                        multi = multi,
+                        shared = shared_handle,
+                        timer = nil,
+                        sockets = {}, -- fd -> { poll }
+                        requests = {}, -- easy ptr -> { callback, response_buffer, header_list, write_cb, easy }
+                        running = ffi.new("int[1]"),
+                    }
 
-        local response_buffer = {}
-        local write_cb = ffi.cast("curl_write_callback", function(ptr, size, nmemb, _)
-            local bytes = tonumber(size * nmemb)
-            if bytes > 0 then
-                table.insert(response_buffer, ffi.string(ptr, bytes))
+                    -- Timer callback from curl telling us when to call socket_action
+                    local timer_cb = ffi.cast("curl_multi_timer_callback", function(_, timeout_ms_cdata, _)
+                        local timeout_ms = tonumber(timeout_ms_cdata)
+                        if curl_state.timer then
+                            curl_state.timer:stop()
+                        end
+
+                        if timeout_ms < 0 then
+                            return 0
+                        end
+
+                        if not curl_state.timer then
+                            curl_state.timer = uv.new_timer()
+                        end
+
+                        curl_state.timer:start(math.max(1, timeout_ms), 0, function()
+                            if curl_state and curl_state.multi then
+                                curl.curl_multi_socket_action(curl_state.multi, CURL_SOCKET_TIMEOUT, 0, curl_state.running)
+                                M._check_completed()
+                            end
+                        end)
+
+                        return 0
+                    end)
+
+                    -- Socket callback from curl for socket state changes
+                    local socket_cb = ffi.cast("curl_socket_callback", function(_, s, what, _, _)
+                        if not curl_state then
+                            return 0
+                        end
+
+                        local fd = tonumber(s)
+
+                        if what == CURL_POLL_REMOVE then
+                            local sock_data = curl_state.sockets[fd]
+                            if sock_data and sock_data.poll then
+                                pcall(function()
+                                    sock_data.poll:stop()
+                                    if not sock_data.poll:is_closing() then
+                                        sock_data.poll:close()
+                                    end
+                                end)
+                            end
+                            curl_state.sockets[fd] = nil
+                            return 0
+                        end
+
+                        local sock_data = curl_state.sockets[fd]
+                        if not sock_data then
+                            local ok_poll, poll = pcall(uv.new_poll, fd)
+                            if not ok_poll or not poll then
+                                return 0
+                            end
+                            sock_data = { poll = poll }
+                            curl_state.sockets[fd] = sock_data
+                        end
+
+                        local events = ""
+                        if bit.band(what, CURL_POLL_IN) ~= 0 then
+                            events = events .. "r"
+                        end
+                        if bit.band(what, CURL_POLL_OUT) ~= 0 then
+                            events = events .. "w"
+                        end
+
+                        if events ~= "" then
+                            pcall(function()
+                                sock_data.poll:start(events, function(err, evts)
+                                    if err or not curl_state or not curl_state.multi then
+                                        return
+                                    end
+                                    local ev_bitmask = 0
+                                    if evts and evts:find("r") then
+                                        ev_bitmask = bit.bor(ev_bitmask, CURL_POLL_IN)
+                                    end
+                                    if evts and evts:find("w") then
+                                        ev_bitmask = bit.bor(ev_bitmask, CURL_POLL_OUT)
+                                    end
+                                    curl.curl_multi_socket_action(curl_state.multi, s, ev_bitmask, curl_state.running)
+                                    M._check_completed()
+                                end)
+                            end)
+                        end
+
+                        return 0
+                    end)
+
+                    curl.curl_multi_setopt(multi, CURLMOPT_TIMERFUNCTION, timer_cb)
+                    curl.curl_multi_setopt(multi, CURLMOPT_SOCKETFUNCTION, socket_cb)
+
+                    -- Keep references to prevent GC
+                    curl_state.timer_cb = timer_cb
+                    curl_state.socket_cb = socket_cb
+
+                    M.using_libcurl = true
+                    M.reason = nil
+                end
             end
-            return bytes
-        end)
-
-        local function with_headers(header_tbl)
-            local list = nil
-            for _, h in ipairs(header_tbl) do
-                list = curl.curl_slist_append(list, h)
-            end
-            return list
-        end
-
-        local function cleanup_headers(list)
-            if list ~= nil then
-                curl.curl_slist_free_all(list)
-            end
-        end
-
-        local function post_with_libcurl(url, headers, body)
-            if not (global_inited and shared_handle and easy) then
-                return false, nil, "libcurl not initialized"
-            end
-
-            response_buffer = {}
-
-            local header_list = with_headers(headers)
-
-            curl.curl_easy_setopt(easy, CURLOPT_NOSIGNAL, 1)
-            curl.curl_easy_setopt(easy, CURLOPT_TCP_KEEPALIVE, 1)
-            curl.curl_easy_setopt(easy, CURLOPT_FOLLOWLOCATION, 1)
-            curl.curl_easy_setopt(easy, CURLOPT_URL, url)
-            curl.curl_easy_setopt(easy, CURLOPT_USERAGENT, "ninetyfive.nvim")
-            curl.curl_easy_setopt(easy, CURLOPT_HTTPHEADER, header_list)
-            curl.curl_easy_setopt(easy, CURLOPT_ACCEPT_ENCODING, "")
-            curl.curl_easy_setopt(easy, CURLOPT_COPYPOSTFIELDS, body)
-            curl.curl_easy_setopt(easy, CURLOPT_WRITEFUNCTION, write_cb)
-            curl.curl_easy_setopt(easy, CURLOPT_WRITEDATA, nil)
-            curl.curl_easy_setopt(easy, CURLOPT_SHARE, shared_handle)
-
-            local res = curl.curl_easy_perform(easy)
-
-            local status = ffi.new("long[1]")
-            curl.curl_easy_getinfo(easy, CURLINFO_RESPONSE_CODE, status)
-
-            cleanup_headers(header_list)
-
-            if res ~= 0 then
-                local err = ffi.string(curl.curl_easy_strerror(res))
-                return false, tonumber(status[0]), err
-            end
-
-            return true, tonumber(status[0]), table.concat(response_buffer)
-        end
-
-        if global_inited and shared_handle and easy then
-            M._post_impl = post_with_libcurl
-            M.using_libcurl = true
-            M.reason = nil
         end
     end
 else
     M.reason = "LuaJIT FFI unavailable"
 end
 
-local function shell_post(url, headers, body)
-    if vim.fn.executable("curl") ~= 1 then
-        return false, nil, "curl executable not found"
+-- Clean up a completed request
+local function cleanup_request(req)
+    if req.header_list then
+        curl.curl_slist_free_all(req.header_list)
+        req.header_list = nil
     end
-
-    local cmd = { "curl", "-sS", "-X", "POST", url, "-w", "%{http_code}" }
-    for _, h in ipairs(headers) do
-        table.insert(cmd, "-H")
-        table.insert(cmd, h)
+    if req.write_cb then
+        req.write_cb:free()
+        req.write_cb = nil
     end
-
-    table.insert(cmd, "--data")
-    table.insert(cmd, body)
-
-    local out
-    if vim.system then
-        local result = vim.system(cmd, { text = true }):wait()
-        if not result or result.code ~= 0 or not result.stdout then
-            local err = (result and result.stderr) or "curl failed"
-            return false, nil, err
-        end
-        out = result.stdout
-    else
-        local ok, output = pcall(vim.fn.system, cmd)
-        if not ok then
-            return false, nil, "curl failed"
-        end
-        out = output
+    if req.easy then
+        curl.curl_easy_cleanup(req.easy)
+        req.easy = nil
     end
-
-    local status = tonumber(out:sub(-3))
-    if not status then
-        return false, nil, "unable to parse curl http status"
-    end
-    local resp_body = out:sub(1, #out - 3)
-
-    return true, status, resp_body
 end
 
---- POST JSON to a URL. Returns ok, status_code, body_or_error.
+-- Check for completed transfers
+function M._check_completed()
+    if not curl_state then
+        return
+    end
+
+    local msgs_left = ffi.new("int[1]")
+    while true do
+        local msg = curl.curl_multi_info_read(curl_state.multi, msgs_left)
+        if msg == nil then
+            break
+        end
+
+        if msg.msg == 1 then -- CURLMSG_DONE
+            local easy = msg.easy_handle
+            local easy_ptr = tostring(easy)
+            local req = curl_state.requests[easy_ptr]
+
+            if req then
+                local status = ffi.new("long[1]")
+                curl.curl_easy_getinfo(easy, 0x200002, status) -- CURLINFO_RESPONSE_CODE
+
+                curl.curl_multi_remove_handle(curl_state.multi, easy)
+
+                local ok = msg.data.result == 0
+                local err_msg = nil
+                if not ok then
+                    err_msg = ffi.string(curl.curl_easy_strerror(msg.data.result))
+                end
+
+                local response_body = table.concat(req.response_buffer)
+                local status_code = tonumber(status[0])
+                local callback = req.callback
+
+                -- Clean up before callback to avoid issues if callback errors
+                curl_state.requests[easy_ptr] = nil
+                cleanup_request(req)
+
+                -- Call the callback
+                vim.schedule(function()
+                    if ok then
+                        callback(true, status_code, response_body)
+                    else
+                        callback(false, status_code, err_msg)
+                    end
+                end)
+            end
+        end
+    end
+end
+
+local function post_with_libcurl(url, headers, body, callback)
+    if not curl_state then
+        vim.schedule(function()
+            callback(false, nil, "libcurl not initialized")
+        end)
+        return
+    end
+
+    local easy = curl.curl_easy_init()
+    if not easy then
+        vim.schedule(function()
+            callback(false, nil, "failed to create curl easy handle")
+        end)
+        return
+    end
+
+    local response_buffer = {}
+
+    -- Create write callback for this request
+    local write_cb = ffi.cast("curl_write_callback", function(ptr, size, nmemb, _)
+        local bytes = tonumber(size * nmemb)
+        if bytes > 0 then
+            table.insert(response_buffer, ffi.string(ptr, bytes))
+        end
+        return bytes
+    end)
+
+    local header_list = nil
+    for _, h in ipairs(headers) do
+        header_list = curl.curl_slist_append(header_list, h)
+    end
+
+    curl.curl_easy_setopt(easy, 99, 1) -- CURLOPT_NOSIGNAL
+    curl.curl_easy_setopt(easy, 213, 1) -- CURLOPT_TCP_KEEPALIVE
+    curl.curl_easy_setopt(easy, 52, 1) -- CURLOPT_FOLLOWLOCATION
+    curl.curl_easy_setopt(easy, 10002, url) -- CURLOPT_URL
+    curl.curl_easy_setopt(easy, 10018, "ninetyfive.nvim") -- CURLOPT_USERAGENT
+    curl.curl_easy_setopt(easy, 10023, header_list) -- CURLOPT_HTTPHEADER
+    curl.curl_easy_setopt(easy, 10102, "") -- CURLOPT_ACCEPT_ENCODING
+    curl.curl_easy_setopt(easy, 10165, body) -- CURLOPT_COPYPOSTFIELDS
+    curl.curl_easy_setopt(easy, 20011, write_cb) -- CURLOPT_WRITEFUNCTION
+    curl.curl_easy_setopt(easy, 10001, nil) -- CURLOPT_WRITEDATA
+    curl.curl_easy_setopt(easy, 10100, curl_state.shared) -- CURLOPT_SHARE
+    curl.curl_easy_setopt(easy, 78, 30) -- CURLOPT_CONNECTTIMEOUT = 30s
+    curl.curl_easy_setopt(easy, 13, 60) -- CURLOPT_TIMEOUT = 60s
+
+    -- Store request state
+    local easy_ptr = tostring(easy)
+    curl_state.requests[easy_ptr] = {
+        callback = callback,
+        response_buffer = response_buffer,
+        header_list = header_list,
+        write_cb = write_cb,
+        easy = easy,
+    }
+
+    -- Add to multi handle
+    local add_result = curl.curl_multi_add_handle(curl_state.multi, easy)
+    if add_result ~= 0 then
+        curl_state.requests[easy_ptr] = nil
+        cleanup_request({
+            header_list = header_list,
+            write_cb = write_cb,
+            easy = easy,
+        })
+        vim.schedule(function()
+            callback(false, nil, "failed to add handle to multi")
+        end)
+        return
+    end
+
+    -- Kick off the request
+    curl.curl_multi_socket_action(curl_state.multi, -1, 0, curl_state.running)
+    M._check_completed()
+end
+
+local function shell_post(url, headers, body, callback)
+    if vim.fn.executable("curl") ~= 1 then
+        vim.schedule(function()
+            callback(false, nil, "curl executable not found")
+        end)
+        return
+    end
+
+    local args = { "-sS", "-X", "POST", url, "-w", "\n%{http_code}", "--connect-timeout", "30", "-m", "60" }
+    for _, h in ipairs(headers) do
+        table.insert(args, "-H")
+        table.insert(args, h)
+    end
+    table.insert(args, "--data")
+    table.insert(args, body)
+
+    local function parse_response(out)
+        local lines = vim.split(out, "\n")
+        local status = tonumber(lines[#lines])
+        if not status then
+            return false, nil, "unable to parse curl http status"
+        end
+        table.remove(lines)
+        local resp_body = table.concat(lines, "\n")
+        return true, status, resp_body
+    end
+
+    -- Use vim.system if available (Neovim 0.10+), otherwise fall back to libuv spawn
+    if vim.system then
+        local cmd = { "curl" }
+        vim.list_extend(cmd, args)
+        vim.system(cmd, { text = true }, function(result)
+            vim.schedule(function()
+                if not result or result.code ~= 0 or not result.stdout then
+                    local err = (result and result.stderr) or "curl failed"
+                    callback(false, nil, err)
+                    return
+                end
+                local ok, status, resp = parse_response(result.stdout)
+                callback(ok, status, resp)
+            end)
+        end)
+    else
+        -- Fallback for older Neovim using libuv
+        local stdout = uv.new_pipe(false)
+        local stderr = uv.new_pipe(false)
+        local out_chunks = {}
+        local proc
+
+        proc = uv.spawn("curl", {
+            args = args,
+            stdio = { nil, stdout, stderr },
+        }, function(code)
+            stdout:read_stop()
+            stderr:read_stop()
+            stdout:close()
+            stderr:close()
+            if proc then
+                proc:close()
+            end
+
+            vim.schedule(function()
+                if code ~= 0 then
+                    callback(false, nil, "curl failed with code " .. code)
+                    return
+                end
+                local out = table.concat(out_chunks)
+                local ok, status, resp = parse_response(out)
+                callback(ok, status, resp)
+            end)
+        end)
+
+        if not proc then
+            stdout:close()
+            stderr:close()
+            vim.schedule(function()
+                callback(false, nil, "failed to spawn curl")
+            end)
+            return
+        end
+
+        stdout:read_start(function(_, data)
+            if data then
+                table.insert(out_chunks, data)
+            end
+        end)
+        stderr:read_start(function() end)
+    end
+end
+
+--- Async POST JSON to a URL. Calls callback(ok, status_code, body_or_error).
+--- Uses libcurl with TLS session reuse when available, falls back to curl CLI.
 ---@param url string
 ---@param headers string[]
 ---@param body string
----@return boolean, number|nil, string|nil
-function M.post_json(url, headers, body)
-    local impl = M._post_impl or shell_post
-    return impl(url, headers, body)
+---@param callback fun(ok: boolean, status: number|nil, body_or_error: string|nil)
+function M.post_json(url, headers, body, callback)
+    if M.using_libcurl then
+        post_with_libcurl(url, headers, body, callback)
+    else
+        shell_post(url, headers, body, callback)
+    end
 end
 
 function M.libcurl_available()

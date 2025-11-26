@@ -22,24 +22,6 @@ local function reset_http_module()
     ]])
 end
 
-T["uses custom implementation when provided"] = function()
-    reset_http_module()
-
-    child.lua([[
-        http._post_impl = function(url, headers, body)
-            return true, 200, table.concat({url, headers[1], body}, "|")
-        end
-        http.using_libcurl = true
-        local ok, status, body = http.post_json("http://example", { "h:1" }, "payload")
-        _G.result = { ok = ok, status = status, body = body }
-    ]])
-
-    local result = eval_lua("_G.result")
-    MiniTest.expect.equality(result.ok, true)
-    MiniTest.expect.equality(result.status, 200)
-    MiniTest.expect.equality(result.body, "http://example|h:1|payload")
-end
-
 T["falls back to curl shell when libcurl disabled"] = function()
     reset_http_module()
 
@@ -47,7 +29,6 @@ T["falls back to curl shell when libcurl disabled"] = function()
         local original_system = vim.system
         local original_exec = vim.fn.executable
 
-        http._post_impl = nil
         http.using_libcurl = false
 
         vim.fn.executable = function(bin)
@@ -57,16 +38,22 @@ T["falls back to curl shell when libcurl disabled"] = function()
             return original_exec(bin)
         end
 
-        vim.system = function(cmd, opts)
-            return {
-                wait = function()
-                    return { code = 0, stdout = "pong201", stderr = "" }
-                end,
-            }
+        vim.system = function(cmd, opts, callback)
+            -- Simulate async callback
+            vim.schedule(function()
+                callback({ code = 0, stdout = "pong\n201", stderr = "" })
+            end)
         end
 
-        local ok, status, body = http.post_json("http://example", { "h:1" }, "payload")
-        _G.result = { ok = ok, status = status, body = body }
+        _G.result = nil
+        http.post_json("http://example", { "h:1" }, "payload", function(ok, status, body)
+            _G.result = { ok = ok, status = status, body = body }
+        end)
+
+        -- Wait for async completion
+        vim.wait(1000, function()
+            return _G.result ~= nil
+        end)
 
         -- restore
         vim.system = original_system
@@ -85,15 +72,20 @@ T["returns error when curl missing"] = function()
     child.lua([[
         local original_exec = vim.fn.executable
 
-        http._post_impl = nil
         http.using_libcurl = false
 
         vim.fn.executable = function()
             return 0
         end
 
-        local ok, status, body = http.post_json("http://example", {}, "payload")
-        _G.result = { ok = ok, status = status, body = body }
+        _G.result = nil
+        http.post_json("http://example", {}, "payload", function(ok, status, body)
+            _G.result = { ok = ok, status = status, body = body }
+        end)
+
+        vim.wait(1000, function()
+            return _G.result ~= nil
+        end)
 
         vim.fn.executable = original_exec
     ]])
@@ -110,23 +102,26 @@ T["returns error on unparsable curl status"] = function()
         local original_system = vim.system
         local original_exec = vim.fn.executable
 
-        http._post_impl = nil
         http.using_libcurl = false
 
         vim.fn.executable = function()
             return 1
         end
 
-        vim.system = function()
-            return {
-                wait = function()
-                    return { code = 0, stdout = "bad-output", stderr = "" }
-                end,
-            }
+        vim.system = function(cmd, opts, callback)
+            vim.schedule(function()
+                callback({ code = 0, stdout = "bad-output", stderr = "" })
+            end)
         end
 
-        local ok, status, body = http.post_json("http://example", {}, "payload")
-        _G.result = { ok = ok, status = status, body = body }
+        _G.result = nil
+        http.post_json("http://example", {}, "payload", function(ok, status, body)
+            _G.result = { ok = ok, status = status, body = body }
+        end)
+
+        vim.wait(1000, function()
+            return _G.result ~= nil
+        end)
 
         vim.system = original_system
         vim.fn.executable = original_exec
@@ -159,20 +154,32 @@ T["makes real HTTP request with libcurl without crashing"] = function()
     -- We tolerate server errors (5xx) since httpbin.org can be flaky.
     child.lua([[
         local results = {}
-        for i = 1, 3 do
+        local completed = 0
+        local total = 3
+
+        for i = 1, total do
             -- Create some garbage to encourage GC
             for j = 1, 100 do
                 local _ = string.rep("x", 1000)
             end
             collectgarbage("collect")
 
-            local ok, status, body = http.post_json(
+            http.post_json(
                 "https://httpbin.org/post",
                 { "Content-Type: application/json" },
-                vim.json.encode({ test = "data", iteration = i })
+                vim.json.encode({ test = "data", iteration = i }),
+                function(ok, status, body)
+                    table.insert(results, { ok = ok, status = status, has_body = body ~= nil and #body > 0 })
+                    completed = completed + 1
+                end
             )
-            table.insert(results, { ok = ok, status = status, has_body = body ~= nil and #body > 0 })
         end
+
+        -- Wait for all requests to complete
+        vim.wait(30000, function()
+            return completed >= total
+        end)
+
         _G.results = results
     ]])
 
