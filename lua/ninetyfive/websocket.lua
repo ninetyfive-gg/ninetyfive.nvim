@@ -610,7 +610,10 @@ function Websocket.setup_connection(server_uri, user_id, api_key)
         end
 
         if api_key and api_key ~= "" then
-            print("indexing consent allowed and api key exists, syncing repository data...")
+            log.debug(
+                "websocket",
+                "indexing consent allowed and api key exists, syncing repository data..."
+            )
 
             vim.defer_fn(function()
                 vim.schedule(function()
