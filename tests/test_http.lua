@@ -22,24 +22,6 @@ local function reset_http_module()
     ]])
 end
 
-T["uses custom implementation when provided"] = function()
-    reset_http_module()
-
-    child.lua([[
-        http._post_impl = function(url, headers, body)
-            return true, 200, table.concat({url, headers[1], body}, "|")
-        end
-        http.using_libcurl = true
-        local ok, status, body = http.post_json("http://example", { "h:1" }, "payload")
-        _G.result = { ok = ok, status = status, body = body }
-    ]])
-
-    local result = eval_lua("_G.result")
-    MiniTest.expect.equality(result.ok, true)
-    MiniTest.expect.equality(result.status, 200)
-    MiniTest.expect.equality(result.body, "http://example|h:1|payload")
-end
-
 T["falls back to curl shell when libcurl disabled"] = function()
     reset_http_module()
 
@@ -47,7 +29,6 @@ T["falls back to curl shell when libcurl disabled"] = function()
         local original_system = vim.system
         local original_exec = vim.fn.executable
 
-        http._post_impl = nil
         http.using_libcurl = false
 
         vim.fn.executable = function(bin)
@@ -57,16 +38,22 @@ T["falls back to curl shell when libcurl disabled"] = function()
             return original_exec(bin)
         end
 
-        vim.system = function(cmd, opts)
-            return {
-                wait = function()
-                    return { code = 0, stdout = "pong201", stderr = "" }
-                end,
-            }
+        vim.system = function(cmd, opts, callback)
+            -- Simulate async callback
+            vim.schedule(function()
+                callback({ code = 0, stdout = "pong\n201", stderr = "" })
+            end)
         end
 
-        local ok, status, body = http.post_json("http://example", { "h:1" }, "payload")
-        _G.result = { ok = ok, status = status, body = body }
+        _G.result = nil
+        http.post_json("http://example", { "h:1" }, "payload", function(ok, status, body)
+            _G.result = { ok = ok, status = status, body = body }
+        end)
+
+        -- Wait for async completion
+        vim.wait(1000, function()
+            return _G.result ~= nil
+        end)
 
         -- restore
         vim.system = original_system
@@ -85,15 +72,20 @@ T["returns error when curl missing"] = function()
     child.lua([[
         local original_exec = vim.fn.executable
 
-        http._post_impl = nil
         http.using_libcurl = false
 
         vim.fn.executable = function()
             return 0
         end
 
-        local ok, status, body = http.post_json("http://example", {}, "payload")
-        _G.result = { ok = ok, status = status, body = body }
+        _G.result = nil
+        http.post_json("http://example", {}, "payload", function(ok, status, body)
+            _G.result = { ok = ok, status = status, body = body }
+        end)
+
+        vim.wait(1000, function()
+            return _G.result ~= nil
+        end)
 
         vim.fn.executable = original_exec
     ]])
@@ -110,23 +102,26 @@ T["returns error on unparsable curl status"] = function()
         local original_system = vim.system
         local original_exec = vim.fn.executable
 
-        http._post_impl = nil
         http.using_libcurl = false
 
         vim.fn.executable = function()
             return 1
         end
 
-        vim.system = function()
-            return {
-                wait = function()
-                    return { code = 0, stdout = "bad-output", stderr = "" }
-                end,
-            }
+        vim.system = function(cmd, opts, callback)
+            vim.schedule(function()
+                callback({ code = 0, stdout = "bad-output", stderr = "" })
+            end)
         end
 
-        local ok, status, body = http.post_json("http://example", {}, "payload")
-        _G.result = { ok = ok, status = status, body = body }
+        _G.result = nil
+        http.post_json("http://example", {}, "payload", function(ok, status, body)
+            _G.result = { ok = ok, status = status, body = body }
+        end)
+
+        vim.wait(1000, function()
+            return _G.result ~= nil
+        end)
 
         vim.system = original_system
         vim.fn.executable = original_exec
@@ -141,6 +136,62 @@ T["libcurl flag reflects availability"] = function()
     reset_http_module()
     local has_libcurl = eval_lua("http.libcurl_available()")
     MiniTest.expect.equality(type(has_libcurl), "boolean")
+end
+
+T["makes real HTTP request with libcurl without crashing"] = function()
+    reset_http_module()
+
+    -- Skip if libcurl is not available
+    local has_libcurl = eval_lua("http.libcurl_available()")
+    if not has_libcurl then
+        MiniTest.skip("libcurl not available")
+        return
+    end
+
+    -- Make multiple real HTTP requests to trigger potential GC issues.
+    -- The main goal is to catch segfaults from improper FFI string handling.
+    -- If the child process crashes, eval_lua will fail with "Invalid channel".
+    -- We tolerate server errors (5xx) since httpbin.org can be flaky.
+    child.lua([[
+        local results = {}
+        local completed = 0
+        local total = 3
+
+        for i = 1, total do
+            -- Create some garbage to encourage GC
+            for j = 1, 100 do
+                local _ = string.rep("x", 1000)
+            end
+            collectgarbage("collect")
+
+            http.post_json(
+                "https://httpbin.org/post",
+                { "Content-Type: application/json" },
+                vim.json.encode({ test = "data", iteration = i }),
+                function(ok, status, body)
+                    table.insert(results, { ok = ok, status = status, has_body = body ~= nil and #body > 0 })
+                    completed = completed + 1
+                end
+            )
+        end
+
+        -- Wait for all requests to complete
+        vim.wait(30000, function()
+            return completed >= total
+        end)
+
+        _G.results = results
+    ]])
+
+    local results = eval_lua("_G.results")
+    -- If we got here, the child process didn't crash (which is the main test).
+    -- Verify requests completed - allow server errors (5xx) due to httpbin flakiness
+    for i, result in ipairs(results) do
+        -- ok=true means libcurl completed without crashing
+        MiniTest.expect.equality(result.ok, true, "Request " .. i .. " should complete without crashing")
+        -- Accept any valid HTTP status (2xx, 4xx, 5xx) - we just care it didn't segfault
+        MiniTest.expect.equality(type(result.status), "number", "Request " .. i .. " should return a status code")
+    end
 end
 
 return T
