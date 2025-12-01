@@ -388,6 +388,262 @@ suggestion.accept = function(current_completion)
     end
 end
 
+suggestion.accept_word = function(current_completion)
+    if completion_id == "" then
+        return
+    end
+
+    local bufnr = vim.api.nvim_get_current_buf()
+    local extmark =
+        vim.api.nvim_buf_get_extmark_by_id(bufnr, ninetyfive_ns, completion_id, { details = true })
+
+    if extmark and #extmark > 0 then
+        local line, col = extmark[1], extmark[2]
+        local details = extmark[3]
+
+        local extmark_text = ""
+
+        -- Get the full suggestion text like the original accept function
+        if details.virt_text then
+            for _, part in ipairs(details.virt_text) do
+                extmark_text = extmark_text .. part[1]
+            end
+        end
+
+        if details.virt_lines then
+            for _, virt_line in ipairs(details.virt_lines) do
+                extmark_text = extmark_text .. "\n"
+                for _, part in ipairs(virt_line) do
+                    extmark_text = extmark_text .. part[1]
+                end
+            end
+        end
+
+        -- Find the first word boundary (from the beginning of the line until the end of the word)
+        local first_word = extmark_text:match("^.-[%a%d_]+")
+        if not first_word or first_word == "" then
+            vim.b[bufnr].ninetyfive_accepting = false
+            completion_id = ""
+            return
+        end
+
+        -- Remove the suggestion
+        vim.api.nvim_buf_del_extmark(bufnr, ninetyfive_ns, completion_id)
+
+        -- Split the first word into lines, in case the suggestion is a multi-line word
+        local lines = vim.split(first_word, "\n", { plain = true })
+
+        -- Insert just the first word with the correct number of lines
+        vim.api.nvim_buf_set_text(bufnr, line, col, line, col, lines)
+
+        local new_line = line + #lines - 1
+
+        local new_col
+        if #lines > 1 then
+            new_col = #lines[#lines]
+        else
+            new_col = col + #first_word
+        end
+
+        vim.api.nvim_win_set_cursor(0, { new_line + 1, new_col })
+
+        -- Handle the completion array using flush logic like the original accept function
+        local has_remaining = false
+        if current_completion and type(current_completion.completion) == "table" then
+            local arr = current_completion.completion
+            local chars_to_consume = #first_word
+            local char_count = 0
+
+            -- Find where to split based on character count
+            for i, item in ipairs(arr) do
+                if item.v and item.v ~= vim.NIL then
+                    local item_text = tostring(item.v)
+                    if char_count + #item_text > chars_to_consume then
+                        -- Split this item
+                        local offset_in_item = chars_to_consume - char_count
+                        local remaining_text = item_text:sub(offset_in_item + 1)
+                        item.v = remaining_text
+
+                        -- Remove all items before this one
+                        local new_arr = {}
+                        for j = i, #arr do
+                            table.insert(new_arr, arr[j])
+                        end
+
+                        -- Replace the array
+                        for j = 1, #arr do
+                            arr[j] = nil
+                        end
+                        for j = 1, #new_arr do
+                            arr[j] = new_arr[j]
+                        end
+
+                        has_remaining = #arr > 0
+                        break
+                    elseif char_count + #item_text == chars_to_consume then
+                        -- Exact boundary, remove this and all previous items
+                        local new_arr = {}
+                        for j = i + 1, #arr do
+                            table.insert(new_arr, arr[j])
+                        end
+
+                        -- Replace the array
+                        for j = 1, #arr do
+                            arr[j] = nil
+                        end
+                        for j = 1, #new_arr do
+                            arr[j] = new_arr[j]
+                        end
+
+                        has_remaining = #arr > 0
+                        break
+                    end
+                    char_count = char_count + #item_text
+                end
+            end
+        end
+
+        if has_remaining then
+            vim.defer_fn(function()
+                suggestion.show(current_completion.completion)
+            end, 10)
+        else
+            vim.b[bufnr].ninetyfive_accepting = false
+            completion_id = ""
+        end
+    end
+end
+
+suggestion.accept_line = function(current_completion)
+    if completion_id == "" then
+        return
+    end
+
+    local bufnr = vim.api.nvim_get_current_buf()
+    local extmark =
+        vim.api.nvim_buf_get_extmark_by_id(bufnr, ninetyfive_ns, completion_id, { details = true })
+
+    if extmark and #extmark > 0 then
+        local line, col = extmark[1], extmark[2]
+        local details = extmark[3]
+
+        local extmark_text = ""
+
+        -- Get the full suggestion text like the original accept function
+        if details.virt_text then
+            for _, part in ipairs(details.virt_text) do
+                extmark_text = extmark_text .. part[1]
+            end
+        end
+
+        if details.virt_lines then
+            for _, virt_line in ipairs(details.virt_lines) do
+                extmark_text = extmark_text .. "\n"
+                for _, part in ipairs(virt_line) do
+                    extmark_text = extmark_text .. part[1]
+                end
+            end
+        end
+
+        -- Find the first line (up to first newline or entire text)
+        -- local first_line, newline_pos = extmark_text:match("^([^\n]*)()")
+        local first_line = extmark_text:match("^([^\n]*)")
+        local has_newline = extmark_text:find("\n", 1, true) ~= nil
+        if not first_line then
+            first_line = extmark_text
+        end
+
+        -- Remove the suggestion
+        vim.api.nvim_buf_del_extmark(bufnr, ninetyfive_ns, completion_id)
+
+        -- Insert the first line
+        if has_newline then
+            -- Split in to two lines: first_line and the newline (empty string)
+            vim.api.nvim_buf_set_text(bufnr, line, col, line, col, { first_line, "" })
+            -- Move cursor to the start of new line
+            vim.api.nvim_win_set_cursor(0, { line + 2, 0 })
+        else
+            -- Single line insert
+            vim.api.nvim_buf_set_text(bufnr, line, col, line, col, { first_line })
+            local new_col = col + #first_line
+            vim.api.nvim_win_set_cursor(0, { line + 1, new_col })
+        end
+
+        -- Calculate how many characters to consume (include newline if present)
+        local chars_to_consume = #first_line
+        -- if newline_pos and newline_pos <= #extmark_text then
+        --     chars_to_consume = chars_to_consume + 1 -- Include the newline
+        -- end
+        if has_newline then
+            chars_to_consume = chars_to_consume + 1 -- Include the newline symbol
+        end
+
+        -- Handle the completion array using flush logic like the original accept function
+        local has_remaining = false
+        if current_completion and type(current_completion.completion) == "table" then
+            local arr = current_completion.completion
+            local char_count = 0
+
+            -- Find where to split based on character count
+            for i, item in ipairs(arr) do
+                if item.v and item.v ~= vim.NIL then
+                    local item_text = tostring(item.v)
+                    if char_count + #item_text > chars_to_consume then
+                        -- Split this item
+                        local offset_in_item = chars_to_consume - char_count
+                        local remaining_text = item_text:sub(offset_in_item + 1)
+                        item.v = remaining_text
+
+                        -- Remove all items before this one
+                        local new_arr = {}
+                        for j = i, #arr do
+                            table.insert(new_arr, arr[j])
+                        end
+
+                        -- Replace the array
+                        for j = 1, #arr do
+                            arr[j] = nil
+                        end
+                        for j = 1, #new_arr do
+                            arr[j] = new_arr[j]
+                        end
+
+                        has_remaining = #arr > 0
+                        break
+                    elseif char_count + #item_text == chars_to_consume then
+                        -- Exact boundary, remove this and all previous items
+                        local new_arr = {}
+                        for j = i + 1, #arr do
+                            table.insert(new_arr, arr[j])
+                        end
+
+                        -- Replace the array
+                        for j = 1, #arr do
+                            arr[j] = nil
+                        end
+                        for j = 1, #new_arr do
+                            arr[j] = new_arr[j]
+                        end
+
+                        has_remaining = #arr > 0
+                        break
+                    end
+                    char_count = char_count + #item_text
+                end
+            end
+        end
+
+        if has_remaining then
+            vim.defer_fn(function()
+                suggestion.show(current_completion.completion)
+            end, 10)
+        else
+            vim.b[bufnr].ninetyfive_accepting = false
+            completion_id = ""
+        end
+    end
+end
+
 suggestion.clear = function()
     local buffer = vim.api.nvim_get_current_buf()
     vim.api.nvim_buf_clear_namespace(buffer, ninetyfive_ns, 0, -1)
