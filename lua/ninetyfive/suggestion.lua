@@ -422,8 +422,6 @@ suggestion.accept_word = function(current_completion)
         -- Find the first word boundary (from the beginning of the line until the end of the word)
         local first_word = extmark_text:match("^.-[%a%d_]+")
         if not first_word or first_word == "" then
-            vim.b[bufnr].ninetyfive_accepting = false
-            completion_id = ""
             return
         end
 
