@@ -119,6 +119,14 @@ function Transport.accept()
     completion_state.accept()
 end
 
+function Transport.accept_word()
+    completion_state.accept_word()
+end
+
+function Transport.accept_line()
+    completion_state.accept_line()
+end
+
 function Transport.accept_edit()
     completion_state.accept_edit()
 end

@@ -77,10 +77,38 @@ local function register_mappings(options, mappings)
         -- conditional tab behavior, ensure we don't completely hijack the tab key.
         if name == "accept" then
             opts.expr = true
+            print("accept", key)
             vim.keymap.set("i", key, function()
                 if transport.has_active and transport.has_active() then
+                    print("accepted full suggestion")
                     return "<Cmd>NinetyFiveAccept<CR>"
                 else
+                    print("skipped full")
+                    return vim.fn.pumvisible() == 1 and "<C-n>" or "<Tab>"
+                end
+            end, opts)
+        elseif name == "accept_word" then
+            opts.expr = true
+            -- log this event to vim messages
+            print("accept_word", key)
+            vim.keymap.set("i", key, function()
+                if transport.has_active and transport.has_active() then
+                    print("accepted word")
+                    return "<Cmd>NinetyFiveAcceptWord<CR>"
+                else
+                    print("skipped word")
+                    return vim.fn.pumvisible() == 1 and "<C-n>" or "<Tab>"
+                end
+            end, opts)
+        elseif name == "accept_line" then
+            opts.expr = true
+            print("accept_line", key)
+            vim.keymap.set("i", key, function()
+                if transport.has_active and transport.has_active() then
+                    print("accepted line")
+                    return "<Cmd>NinetyFiveAcceptLine<CR>"
+                else
+                    print("skipped line")
                     return vim.fn.pumvisible() == 1 and "<C-n>" or "<Tab>"
                 end
             end, opts)
@@ -102,6 +130,8 @@ function Ninetyfive.setup(options)
 
     register_mappings(Ninetyfive.options.mappings, {
         accept = "<Cmd>NinetyFiveAccept<CR>",
+        accept_word = "<Cmd>NinetyFiveAcceptWord<CR>",
+        accept_line = "<Cmd>NinetyFiveAcceptLine<CR>",
         accept_edit = "<Cmd>NinetyFiveAcceptEdit<CR>",
         reject = "<Cmd>NinetyFiveReject<CR>",
     })

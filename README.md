@@ -213,11 +213,15 @@ Run `:Lazy update ninetyfive` within neovim to pull the latest commits from main
 
 ## Commands
 
-| Command               | Description                                  |
-| --------------------- | -------------------------------------------- |
-| `:NinetyFive`         | Toggles the plugin (for the current session) |
-| `:NinetyFivePurchase` | Redirects to the purchase page               |
-| `:NinetyFiveKey`      | Provide an API key                           |
+| Command                    | Description                                                |
+| -------------------------- | ---------------------------------------------------------- |
+| `:NinetyFive`             | Toggles the plugin (for the current session)              |
+| `:NinetyFivePurchase`     | Redirects to the purchase page                            |
+| `:NinetyFiveKey`          | Provide an API key                                        |
+| `:NinetyFiveAccept`       | Accept the entire current suggestion                       |
+| `:NinetyFiveAcceptWord`   | Accept one word of the current suggestion                  |
+| `:NinetyFiveAcceptLine`   | Accept one line of the current suggestion                  |
+| `:NinetyFiveAcceptEdit`   | Accept the current edit suggestion                         |
 
 ## Development
 
