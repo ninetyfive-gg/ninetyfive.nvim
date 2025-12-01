@@ -18,9 +18,13 @@ Ninetyfive.options = {
     mappings = {
         -- When `true`, creates all the mappings set
         enabled = true,
+
         -- Sets a global mapping to accept a suggestion
         accept = "<Tab>",
         accept_edit = "<C-g>",
+        accept_word = nil,
+        accept_line = nil,
+
         -- Sets a global mapping to reject a suggestion
         reject = "<C-w>",
     },
@@ -77,38 +81,29 @@ local function register_mappings(options, mappings)
         -- conditional tab behavior, ensure we don't completely hijack the tab key.
         if name == "accept" then
             opts.expr = true
-            print("accept", key)
             vim.keymap.set("i", key, function()
                 if transport.has_active and transport.has_active() then
-                    print("accepted full suggestion")
                     return "<Cmd>NinetyFiveAccept<CR>"
                 else
-                    print("skipped full")
                     return vim.fn.pumvisible() == 1 and "<C-n>" or "<Tab>"
                 end
             end, opts)
         elseif name == "accept_word" then
             opts.expr = true
             -- log this event to vim messages
-            print("accept_word", key)
             vim.keymap.set("i", key, function()
                 if transport.has_active and transport.has_active() then
-                    print("accepted word")
                     return "<Cmd>NinetyFiveAcceptWord<CR>"
                 else
-                    print("skipped word")
                     return vim.fn.pumvisible() == 1 and "<C-n>" or "<Tab>"
                 end
             end, opts)
         elseif name == "accept_line" then
             opts.expr = true
-            print("accept_line", key)
             vim.keymap.set("i", key, function()
                 if transport.has_active and transport.has_active() then
-                    print("accepted line")
                     return "<Cmd>NinetyFiveAcceptLine<CR>"
                 else
-                    print("skipped line")
                     return vim.fn.pumvisible() == 1 and "<C-n>" or "<Tab>"
                 end
             end, opts)
