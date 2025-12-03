@@ -45,7 +45,6 @@ Default values:
           enabled = true,
           -- Sets a global mapping to accept a suggestion
           accept = "<Tab>",
-          accept_edit = "<C-g>",
           -- Sets a global mapping to reject a suggestion
           reject = "<C-w>",
       },

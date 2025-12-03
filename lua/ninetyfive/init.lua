@@ -147,10 +147,6 @@ function Ninetyfive.accept()
     transport.accept()
 end
 
-function Ninetyfive.accept_edit(edit)
-    transport.accept_edit()
-end
-
 function Ninetyfive.reject()
     transport.reject()
 end

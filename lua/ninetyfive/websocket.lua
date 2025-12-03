@@ -369,10 +369,6 @@ local function request_completion(args)
     completion_state.clear_suggestion()
 end
 
-function Websocket.accept_edit()
-    completion_state.accept_edit()
-end
-
 function Websocket.accept()
     completion_state.accept()
 end
@@ -708,11 +704,6 @@ function Websocket.setup_connection(server_uri, user_id, api_key)
                         if c and c.request_id == parsed.r then
                             if parsed.v and parsed.v ~= vim.NIL then
                                 table.insert(c.completion, parsed)
-                            end
-                            if parsed.e then
-                                c.edits = parsed.e
-                                c.edit_description = parsed.ed
-                                c:close()
                             end
                             suggestion.show(c.completion)
                         end

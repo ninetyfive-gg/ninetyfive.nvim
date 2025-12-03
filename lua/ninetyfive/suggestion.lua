@@ -1,194 +1,10 @@
 local suggestion = {}
 local ninetyfive_ns = vim.api.nvim_create_namespace("ninetyfive_ghost_ns")
-local ninetyfive_edit_ns = vim.api.nvim_create_namespace("ninetyfive_edit_ns")
-local ninetyfive_hint_ns = vim.api.nvim_create_namespace("ninetyfive_hint_ns")
 
 local completion_id = ""
+local completion_bufnr = nil
 
 local log = require("ninetyfive.util.log")
-
-local function get_pos_from_index(buf, index)
-    local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, true)
-    local char_count = 0
-
-    for line_num, line in ipairs(lines) do
-        local line_len = #line -- No need to add 1 for newline
-        if char_count + line_len >= index then
-            local col = math.min(index - char_count, line_len) -- Clamp to valid range
-            return line_num - 1, col -- Convert to 0-based
-        end
-        char_count = char_count + line_len + 1 -- +1 for newline
-    end
-
-    return #lines - 1, 0 -- Fallback to last line start
-end
-
-suggestion.showInsertSuggestion = function(start_pos, end_pos, message)
-    local buf = vim.api.nvim_get_current_buf()
-    local start_line, start_col = get_pos_from_index(buf, start_pos)
-
-    -- Clear previous highlights in the namespace
-    vim.api.nvim_buf_clear_namespace(buf, ninetyfive_edit_ns, 0, -1)
-
-    -- Trim trailing newlines and split the message into lines
-    message = message:gsub("\n+$", "")
-    local message_lines = vim.fn.split(message, "\n")
-
-    -- Create virtual lines for the suggestion, filtering out empty lines
-    local virt_lines = {}
-    for _, line in ipairs(message_lines) do
-        if line ~= "" then
-            table.insert(virt_lines, { { line, "DiffAdd" } })
-        end
-    end
-
-    -- Only create an extmark if there are non-empty lines to show
-    if #virt_lines > 0 then
-        -- Create an extmark with virtual lines that appear below the start position
-        vim.api.nvim_buf_set_extmark(buf, ninetyfive_edit_ns, start_line, start_col, {
-            virt_lines = virt_lines,
-            virt_lines_above = true,
-            hl_mode = "combine",
-            ephemeral = false,
-        })
-    end
-end
-
-suggestion.showDeleteSuggestion = function(edit)
-    local buf = vim.api.nvim_get_current_buf()
-    local start_line, start_col = get_pos_from_index(buf, edit.start)
-    local end_line, end_col = get_pos_from_index(buf, edit["end"])
-
-    -- Clear previous highlights in the namespace
-    vim.api.nvim_buf_clear_namespace(buf, ninetyfive_edit_ns, 0, -1)
-
-    -- Create a custom highlight group with red background for deletion
-    vim.cmd([[
-        highlight NinetyfiveDelete guibg=#ff5555 guifg=white ctermbg=red ctermfg=white
-    ]])
-
-    -- Highlight the region to be deleted with red background
-    if start_line == end_line then
-        -- Single line deletion
-        vim.api.nvim_buf_add_highlight(
-            buf,
-            ninetyfive_edit_ns,
-            "NinetyfiveDelete",
-            start_line,
-            start_col,
-            end_col
-        )
-    else
-        -- Multi-line deletion
-        -- Highlight first line from start_col to end
-        local first_line_text = vim.api.nvim_buf_get_lines(buf, start_line, start_line + 1, false)[1]
-            or ""
-        vim.api.nvim_buf_add_highlight(
-            buf,
-            ninetyfive_edit_ns,
-            "NinetyfiveDelete",
-            start_line,
-            start_col,
-            #first_line_text
-        )
-
-        -- Highlight middle lines completely
-        for line = start_line + 1, end_line - 1 do
-            local line_text = vim.api.nvim_buf_get_lines(buf, line, line + 1, false)[1] or ""
-            vim.api.nvim_buf_add_highlight(
-                buf,
-                ninetyfive_edit_ns,
-                "NinetyfiveDelete",
-                line,
-                0,
-                #line_text
-            )
-        end
-
-        -- Highlight last line from start to end_col
-        if start_line < end_line then
-            vim.api.nvim_buf_add_highlight(
-                buf,
-                ninetyfive_edit_ns,
-                "NinetyfiveDelete",
-                end_line,
-                0,
-                end_col
-            )
-        end
-    end
-end
-
-suggestion.showUpdateSuggestion = function(start_pos, end_pos, message)
-    local buf = vim.api.nvim_get_current_buf()
-    local start_line, start_col = get_pos_from_index(buf, start_pos)
-    local end_line, end_col = get_pos_from_index(buf, end_pos)
-
-    -- Clear previous highlights in the namespace
-    vim.api.nvim_buf_clear_namespace(buf, ninetyfive_edit_ns, 0, -1)
-
-    -- Then overlay the message text on top of the range
-    local message_lines = vim.fn.split(message, "\n")
-    local num_lines = end_line - start_line + 1
-
-    -- Handle the case where message has more or fewer lines than the range
-    local lines_to_show = math.min(#message_lines, num_lines)
-
-    for i = 1, lines_to_show do
-        local line_text = message_lines[i]
-        local current_line = start_line + i - 1
-        local current_col = 0
-
-        -- For the first line, use start_col
-        if i == 1 then
-            current_col = start_col
-        end
-
-        -- For the LAST line, append the tail (if it exists)
-        if i == #message_lines and i == lines_to_show and current_line == end_line then
-            local end_line_text = vim.api.nvim_buf_get_lines(buf, end_line, end_line + 1, false)[1]
-                or ""
-            local tail = end_line_text:sub(end_col + 1)
-            if tail ~= "" then
-                line_text = line_text .. tail -- Append tail to the last error line
-            end
-        end
-
-        -- Create an extmark for each line with overlay text
-        vim.api.nvim_buf_set_extmark(buf, ninetyfive_edit_ns, current_line, current_col, {
-            virt_text = { { line_text, "DiffChange" } },
-            virt_text_pos = "overlay",
-            hl_mode = "replace",
-            ephemeral = false,
-        })
-    end
-end
-
-suggestion.showEditDescription = function(completion)
-    if not completion then
-        log.debug("suggestion", "no active completion")
-        return
-    end
-
-    local bufnr = vim.api.nvim_get_current_buf()
-
-    -- Clear previous hints
-    vim.api.nvim_buf_clear_namespace(bufnr, ninetyfive_hint_ns, 0, -1)
-    vim.api.nvim_buf_clear_namespace(bufnr, ninetyfive_edit_ns, 0, -1)
-
-    local cursor = vim.api.nvim_win_get_cursor(0)
-    local line = cursor[1] - 1
-    local col = cursor[2]
-
-    -- Show a hint about the edit
-    vim.api.nvim_buf_set_extmark(bufnr, ninetyfive_hint_ns, line, col, {
-        right_gravity = true,
-        virt_text = { { " ⇘ " .. completion.edit_description, "DiagnosticHint" } },
-        virt_text_pos = "eol",
-        hl_mode = "combine",
-        ephemeral = false,
-    })
-end
 
 suggestion.show = function(completion)
     -- build text up to the next flush
@@ -209,62 +25,49 @@ suggestion.show = function(completion)
     local text = table.concat(parts)
 
     local bufnr = vim.api.nvim_get_current_buf()
-    local cursor = vim.api.nvim_win_get_cursor(0)
-    local line = cursor[1] - 1
-    local col = cursor[2]
-
     -- Clear any existing extmarks in the buffer
-    vim.api.nvim_buf_clear_namespace(bufnr, ninetyfive_ns, 0, -1)
-
+    if bufnr ~= nil and vim.api.nvim_buf_is_valid(bufnr) then
+        vim.api.nvim_buf_del_extmark(bufnr, ninetyfive_ns, 1)
+    end
     local virt_lines = {}
     for _, l in ipairs(vim.fn.split(text, "\n", true)) do
         table.insert(virt_lines, { { l, "Comment" } })
     end
     local first_line = table.remove(virt_lines, 1) or { { "", "Comment" } }
 
-    completion_id = vim.api.nvim_buf_set_extmark(bufnr, ninetyfive_ns, line, col, {
-        right_gravity = true,
-        virt_text = first_line,
-        virt_text_pos = vim.fn.has("nvim-0.10") == 1 and "inline" or "overlay",
-        virt_lines = virt_lines,
-        hl_mode = "combine",
-        ephemeral = false,
-    })
+    completion_id = vim.api.nvim_buf_set_extmark(
+        bufnr,
+        ninetyfive_ns,
+        vim.fn.line(".") - 1,
+        vim.fn.col(".") - 1,
+        {
+            id = 1,
+            -- right_gravity = true,
+            virt_text = first_line,
+            -- virt_text_pos = vim.fn.has("nvim-0.10") == 1 and "inline" or "overlay",
+            virt_lines = virt_lines,
+            virt_text_win_col = vim.fn.virtcol(".") - 1,
+            hl_mode = "combine",
+            ephemeral = false,
+        }
+    ) -- :h api-extended-marks
+    completion_bufnr = bufnr
 end
 
-suggestion.accept_edit = function(current_completion)
-    local bufnr = vim.api.nvim_get_current_buf()
-    local edit_index = current_completion.edit_index - 1
+function suggestion.get_current_extmark_position(bufnr)
+    bufnr = bufnr or completion_bufnr
 
-    if edit_index < 0 then
-        return
+    if completion_id == "" or not bufnr or bufnr == 0 then
+        return nil
     end
 
-    local edit = current_completion.edits[edit_index]
-
-    if not edit then
-        return
+    local mark =
+        vim.api.nvim_buf_get_extmark_by_id(bufnr, ninetyfive_ns, completion_id, { details = false })
+    if not mark or #mark < 2 then
+        return nil
     end
 
-    local start_row, start_col = get_pos_from_index(bufnr, edit.start)
-    local end_row, end_col = get_pos_from_index(bufnr, edit["end"])
-
-    vim.api.nvim_buf_clear_namespace(bufnr, ninetyfive_hint_ns, 0, -1)
-    vim.api.nvim_buf_clear_namespace(bufnr, ninetyfive_edit_ns, 0, -1)
-
-    local edit_text = edit.text
-    if string.find(edit_text, "\n") then
-        local lines = {}
-        for s in string.gmatch(edit_text, "[^\n]+") do
-            table.insert(lines, s)
-        end
-
-        -- TODO does this ever override some text from the last line after the edit???
-
-        vim.api.nvim_buf_set_text(bufnr, start_row, start_col, end_row, end_col, lines)
-    else
-        vim.api.nvim_buf_set_text(bufnr, start_row, start_col, end_row, end_col, { edit_text })
-    end
+    return { row = mark[1], col = mark[2] }
 end
 
 suggestion.accept = function(current_completion)
@@ -384,13 +187,18 @@ suggestion.accept = function(current_completion)
             -- do a reset once no completions exist
             vim.b[bufnr].ninetyfive_accepting = false
             completion_id = ""
+            completion_bufnr = nil
         end
     end
 end
 
 suggestion.clear = function()
     local buffer = vim.api.nvim_get_current_buf()
-    vim.api.nvim_buf_clear_namespace(buffer, ninetyfive_ns, 0, -1)
+    if buffer ~= nil and vim.api.nvim_buf_is_valid(buffer) then
+        vim.api.nvim_buf_del_extmark(buffer, ninetyfive_ns, 1)
+    end
+    completion_id = ""
+    completion_bufnr = nil
 end
 
 return suggestion

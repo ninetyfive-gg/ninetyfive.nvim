@@ -61,34 +61,6 @@ function CompletionState.get_completion_chunks()
     return current_completion.completion
 end
 
-function CompletionState.accept_edit()
-    if current_completion then
-        suggestion.accept_edit(current_completion)
-
-        if current_completion.edit_index > #current_completion.edits then
-            current_completion = nil
-            return
-        end
-
-        local edit = current_completion:next_edit()
-
-        if not edit then
-            return
-        end
-
-        if edit.text == "" then
-            suggestion.showDeleteSuggestion(edit)
-            current_completion.edit_index = current_completion.edit_index + 1
-        elseif edit.start == edit["end"] then
-            suggestion.showInsertSuggestion(edit.start, edit["end"], edit.text)
-            current_completion.edit_index = current_completion.edit_index + 1
-        else
-            suggestion.showUpdateSuggestion(edit.start, edit["end"], edit.text)
-            current_completion.edit_index = current_completion.edit_index + 1
-        end
-    end
-end
-
 function CompletionState.accept()
     if
         current_completion ~= nil

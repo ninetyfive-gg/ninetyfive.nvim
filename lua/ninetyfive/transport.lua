@@ -119,10 +119,6 @@ function Transport.accept()
     completion_state.accept()
 end
 
-function Transport.accept_edit()
-    completion_state.accept_edit()
-end
-
 function Transport.reject()
     completion_state.reject()
 end
