@@ -190,12 +190,10 @@ local function start_request(payload)
     if use_gzip then
         table.insert(curl_cmd, "-H")
         table.insert(curl_cmd, "Content-Encoding: gzip")
-        table.insert(curl_cmd, "--data-binary")
-        table.insert(curl_cmd, "@-")
-    else
-        table.insert(curl_cmd, "--data")
-        table.insert(curl_cmd, encoded)
     end
+
+    table.insert(curl_cmd, "--data-binary")
+    table.insert(curl_cmd, "@-")
 
     log.debug("sse", "payload bytes: %d (gzip=%s)", #body, tostring(use_gzip))
     log.debug("sse", "curl command: %s", table.concat(curl_cmd, " "))
@@ -256,11 +254,8 @@ local function start_request(payload)
         end,
         stdout_buffered = false,
         stderr_buffered = false,
+        stdin = "pipe",
     }
-
-    if use_gzip then
-        job_opts.stdin = "pipe"
-    end
 
     state.current_job = vim.fn.jobstart(curl_cmd, job_opts)
 
@@ -270,23 +265,21 @@ local function start_request(payload)
         return false
     end
 
-    if use_gzip then
-        local ok_send, err_send = pcall(function()
-            vim.fn.chansend(state.current_job, body)
-            vim.fn.chanclose(state.current_job, "stdin")
-        end)
+    local ok_send, err_send = pcall(function()
+        vim.fn.chansend(state.current_job, body)
+        vim.fn.chanclose(state.current_job, "stdin")
+    end)
 
-        if not ok_send then
-            log.notify(
-                "sse",
-                vim.log.levels.ERROR,
-                true,
-                "failed to send request body: " .. tostring(err_send)
-            )
-            vim.fn.jobstop(state.current_job)
-            state.current_job = nil
-            return false
-        end
+    if not ok_send then
+        log.notify(
+            "sse",
+            vim.log.levels.ERROR,
+            true,
+            "failed to send request body: " .. tostring(err_send)
+        )
+        vim.fn.jobstop(state.current_job)
+        state.current_job = nil
+        return false
     end
 
     return true
