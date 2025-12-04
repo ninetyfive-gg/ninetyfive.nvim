@@ -319,7 +319,8 @@ function Sse.request_completion(args)
 
     local new_completion = Completion.new(request_id)
     local curr_text = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
-    local current_prefix = util.get_cursor_prefix(bufnr, cursor) -- maybe just pass it?
+    local current_prefix = util.get_cursor_prefix(bufnr, cursor) -- maybe just pass it? and maybe add them to the "constructor" lol
+    new_completion.buffer = bufnr
     new_completion.active_text = curr_text
     new_completion.prefix = current_prefix
 
