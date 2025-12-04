@@ -81,6 +81,8 @@ local function handle_existing_completion(current_prefix)
 
     if completion_text:sub(1, #inserted_text) == inserted_text then
         local new_completion = trim_completion_chunks(current_completion.completion, #inserted_text)
+        current_completion.completion = new_completion
+        current_completion.prefix = current_prefix
         suggestion.clear()
         suggestion.show(new_completion)
         return true

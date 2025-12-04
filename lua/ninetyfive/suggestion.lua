@@ -113,6 +113,31 @@ local function collect_completion_text(completion)
     return table.concat(parts)
 end
 
+local function extract_extmark_text(details)
+    if type(details) ~= "table" then
+        return ""
+    end
+
+    local parts = {}
+
+    if details.virt_text then
+        for _, part in ipairs(details.virt_text) do
+            parts[#parts + 1] = part[1]
+        end
+    end
+
+    if details.virt_lines then
+        for _, virt_line in ipairs(details.virt_lines) do
+            parts[#parts + 1] = "\n"
+            for _, part in ipairs(virt_line) do
+                parts[#parts + 1] = part[1]
+            end
+        end
+    end
+
+    return table.concat(parts)
+end
+
 local function apply_completion_text(bufnr, line, col, text)
     if text == "" then
         return false
@@ -200,7 +225,13 @@ local function accept_with_selector(selector)
         return
     end
 
-    local accepted_text = selector(completion_text)
+    local details = extmark[3]
+    local display_text = extract_extmark_text(details)
+    if display_text == "" then
+        display_text = completion_text
+    end
+
+    local accepted_text = selector(display_text)
     if not accepted_text or accepted_text == "" then
         vim.b[bufnr].ninetyfive_accepting = false
         return
@@ -234,10 +265,6 @@ local function accept_with_selector(selector)
         completion_id = ""
         completion_bufnr = nil
     end
-end
-
-local function select_full_completion(text)
-    return text
 end
 
 local function select_next_word(text)
@@ -286,7 +313,68 @@ local function select_line(text)
 end
 
 suggestion.accept = function()
-    accept_with_selector(select_full_completion)
+    local current_completion = Completion.get()
+    if
+        current_completion == nil
+        or #current_completion.completion == 0
+        or current_completion.buffer ~= vim.api.nvim_get_current_buf()
+    then
+        return
+    end
+
+    if completion_id == "" then
+        return
+    end
+
+    local bufnr = vim.api.nvim_get_current_buf()
+    vim.b[bufnr].ninetyfive_accepting = true
+
+    local extmark = vim.api.nvim_buf_get_extmark_by_id(bufnr, ninetyfive_ns, 1, { details = true })
+    if not extmark or #extmark == 0 then
+        vim.b[bufnr].ninetyfive_accepting = false
+        return
+    end
+
+    local details = extmark[3]
+    local extmark_text = extract_extmark_text(details)
+    if extmark_text == "" then
+        extmark_text = collect_completion_text(current_completion.completion)
+    end
+
+    vim.api.nvim_buf_del_extmark(bufnr, ninetyfive_ns, 1)
+
+    local line, col = extmark[1], extmark[2]
+    local applied = apply_completion_text(bufnr, line, col, extmark_text)
+    if not applied then
+        return
+    end
+
+    current_completion.last_accepted = extmark_text
+
+    local count = 0
+    if type(current_completion.completion) == "table" then
+        for i = 1, #current_completion.completion do
+            local item = current_completion.completion[i]
+            if item == vim.NIL then
+                count = count + 1
+                break
+            end
+            count = count + #item
+        end
+    end
+
+    local updated_completion = consumeChars(current_completion.completion, count)
+    current_completion.completion = updated_completion
+
+    if #updated_completion > 0 then
+        table.insert(updated_completion, 1, "\n")
+        vim.b[bufnr].ninetyfive_accepting = true
+        suggestion.show(updated_completion)
+    else
+        vim.b[bufnr].ninetyfive_accepting = false
+        completion_id = ""
+        completion_bufnr = nil
+    end
 end
 
 suggestion.accept_word = function()
