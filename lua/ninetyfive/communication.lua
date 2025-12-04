@@ -283,7 +283,9 @@ function Communication:_request_websocket_completion(opts)
         end
 
         git.get_repo_root(function(git_root)
-            local repo = repo_name_from_path(git_root) or repo_name_from_path(vim.fn.getcwd()) or "unknown"
+            local repo = repo_name_from_path(git_root)
+                or repo_name_from_path(vim.fn.getcwd())
+                or "unknown"
             local request_id = string.format("%d_%04d", os.time(), math.random(0, 9999))
             local payload = {
                 type = "delta-completion-request",
@@ -330,6 +332,7 @@ end
 
 function Communication:request_completion(opts)
     if self:is_websocket() then
+        self:send_file_content({ bufnr = opts.bufnr })
         return self:_request_websocket_completion(opts)
     elseif self:is_sse() then
         return self:_request_sse_completion(opts)
