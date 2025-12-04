@@ -2,7 +2,6 @@ local log = require("ninetyfive.util.log")
 local Completion = require("ninetyfive.completion")
 local git = require("ninetyfive.git")
 local suggestion = require("ninetyfive.suggestion")
-local completion_state = require("ninetyfive.completion_state")
 local state = require("ninetyfive.state")
 local ignored_filetypes = require("ninetyfive.ignored_filetypes")
 local plugin_version = require("ninetyfive.version")
@@ -18,14 +17,6 @@ local reconnect_delay = 1000
 local home = vim.fn.expand("~")
 local cache_path = home .. "/.ninetyfive/consent.json"
 vim.fn.mkdir(home .. "/.ninetyfive", "p")
-
-function Websocket.has_active()
-    return completion_state.has_active()
-end
-
-function Websocket.clear()
-    completion_state.clear()
-end
 
 -- Function to send a message to the websocket
 function Websocket.send_message(message)
@@ -362,10 +353,6 @@ function Websocket.get_completion()
     end
 
     return c.completion
-end
-
-function Websocket.reset_completion()
-    completion_state.reset_completion()
 end
 
 return Websocket

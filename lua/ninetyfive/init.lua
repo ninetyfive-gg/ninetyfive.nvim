@@ -4,7 +4,7 @@ local log = require("ninetyfive.util.log")
 local state = require("ninetyfive.state")
 local Communication = require("ninetyfive.communication")
 local CommunicationAutocmds = require("ninetyfive.communication_autocmds")
-local completion_state = require("ninetyfive.completion_state")
+local Completion = require("ninetyfive.completion")
 local suggestion = require("ninetyfive.suggestion")
 
 local communication = Communication.new()
@@ -130,7 +130,8 @@ function Ninetyfive.toggle()
         setup_connection(server, user_data.user_id, user_data.api_key)
     else
         shutdown_connection()
-        completion_state.clear()
+        suggestion.clear()
+        Completion.clear()
     end
 end
 
@@ -212,7 +213,8 @@ function Ninetyfive.accept()
 end
 
 function Ninetyfive.reject()
-    completion_state.reject()
+    Completion.clear() -- right?
+    suggestion.clear()
 end
 
 _G.Ninetyfive = Ninetyfive
