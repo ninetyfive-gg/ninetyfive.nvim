@@ -4,6 +4,7 @@ local Completion = require("ninetyfive.completion")
 local git = require("ninetyfive.git")
 local ignored_filetypes = require("ninetyfive.ignored_filetypes")
 local global_state = require("ninetyfive.state")
+local util = require("ninetyfive.util")
 
 local Sse = {}
 
@@ -75,12 +76,12 @@ local function handle_message(parsed)
     if parsed.content ~= nil and parsed.content ~= vim.NIL then
         table.insert(current_completion.completion, parsed.content)
         current_completion.is_active = true
-        print("concat " .. parsed.content)
+        -- print("concat " .. parsed.content)
     elseif parsed.flush or parsed["end"] then
-        print("flush")
+        -- print("flush")
         table.insert(current_completion.completion, vim.NIL)
         if parsed["end"] == true then
-            print("end")
+            -- print("end")
             current_completion.is_active = false
         end
     end
@@ -317,6 +318,10 @@ function Sse.request_completion(args)
     local request_id = tostring(os.time()) .. "_" .. tostring(math.random(1000, 9999))
 
     local new_completion = Completion.new(request_id)
+    local curr_text = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
+    local current_prefix = util.get_cursor_prefix(bufnr, cursor) -- maybe just pass it?
+    new_completion.active_text = curr_text
+    new_completion.prefix = current_prefix
 
     local payload = {
         user_id = state.user_id,
@@ -380,7 +385,8 @@ function Sse.setup_autocommands()
                 return
             end
 
-            Completion.clear()
+            -- we'd need the same check that on textchangedI?
+            -- Completion.clear()
         end,
     })
 
@@ -389,6 +395,7 @@ function Sse.setup_autocommands()
         group = group,
         callback = function(args)
             local bufnr = args.buf
+
             local filetype = vim.bo[bufnr].filetype
 
             if vim.tbl_contains(ignored_filetypes, filetype) then
@@ -399,10 +406,105 @@ function Sse.setup_autocommands()
                 return
             end
 
-            if vim.b[bufnr].ninetyfive_accepting then
-                return
+            -- I probably do need this because of the accept that triggers this fn
+            -- BUT THIS MFER is still a bug god damnit
+            -- TODO what if i store what i accepted and here check
+            -- if vim.b[bufnr].ninetyfive_accepting then
+            --     return
+            -- end
+
+            -- Get current prefix (text before cursor)
+            local cursor = vim.api.nvim_win_get_cursor(0)
+            local current_prefix = util.get_cursor_prefix(bufnr, cursor)
+
+            -- Check if user is typing part of the current completion
+            local current_completion = Completion.get()
+            if current_completion == nil then
+                print("nil completion")
+            end
+            if
+                current_completion
+                and current_completion.prefix
+                and current_completion.completion
+            then
+                -- Calculate what the user inserted since last completion request
+                local inserted_text = current_prefix:sub(#current_completion.prefix + 1) --TODO ccant we get rid of +1?
+                print("inserted " .. inserted_text:gsub("\n", "\\n"))
+                if inserted_text ~= "" then
+                    -- Build the completion text up to the next nil
+                    local completion_text = ""
+                    for i = 1, #current_completion.completion do
+                        local item = current_completion.completion[i]
+                        if item == vim.NIL then -- Stop at first nil
+                            break
+                        end
+                        completion_text = completion_text .. tostring(item)
+                        -- print(tostring(item))
+                    end
+                    -- for _, segment in ipairs(current_completion.completion) do
+                    --     if segment == vim.NIL then
+                    --         break
+                    --     end
+                    --     completion_text = completion_text .. segment
+                    -- end
+
+                    -- Check if the completion starts with what the user typed
+                    -- print("completion " .. completion_text:gsub("\n", "\\n"))
+                    -- print("accepted " .. current_completion.last_accepted)
+                    -- print("in " .. inserted_text:gsub("\n", "\\n"):gsub("\t", "\\t"):gsub(" ", "\\s") .."!")
+                    -- print("co " .. completion_text:sub(1, #inserted_text):gsub("\n", "\\n"):gsub("\t", "\\t"):gsub(" ", "\\s").."!")
+                    -- print(completion_text:sub(1, #inserted_text) == inserted_text)
+                    if completion_text:sub(1, #inserted_text) == inserted_text then
+                        -- User is typing part of the current completion, don't request new completion
+
+                        local chars_to_remove = #inserted_text
+                        local new_completion = {}
+
+                        for i, segment in ipairs(current_completion.completion) do
+                            if segment == vim.NIL then
+                                -- Copy the rest of the array including nils
+                                for j = i, #current_completion.completion do
+                                    table.insert(new_completion, current_completion.completion[j])
+                                end
+                                break
+                            end
+
+                            if chars_to_remove >= #segment then
+                                -- Skip this entire segment
+                                chars_to_remove = chars_to_remove - #segment
+                            else
+                                -- Partially consume this segment
+                                local remaining = segment:sub(chars_to_remove + 1)
+                                table.insert(new_completion, remaining)
+                                chars_to_remove = 0
+
+                                -- Copy the rest of the array
+                                for j = i + 1, #current_completion.completion do
+                                    table.insert(new_completion, current_completion.completion[j])
+                                end
+                                break
+                            end
+                        end
+
+                        print("Typing showing suggestion!")
+                        suggestion.clear()
+                        suggestion.show(new_completion)
+
+                        return
+                    elseif inserted_text == current_completion.last_accepted then
+                        -- Extend prefix so future comparisons ignore the accepted chunk
+                        print("we just inserted from accepting!")
+                        current_completion.prefix = current_completion.prefix
+                            .. current_completion.last_accepted
+                        current_completion.last_accepted = ""
+                        return
+                    end
+                end
             end
 
+            print("we should send and request!")
+
+            suggestion.clear()
             Completion.clear()
 
             vim.schedule(function()

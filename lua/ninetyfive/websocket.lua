@@ -6,6 +6,7 @@ local completion_state = require("ninetyfive.completion_state")
 local state = require("ninetyfive.state")
 local ignored_filetypes = require("ninetyfive.ignored_filetypes")
 local plugin_version = require("ninetyfive.version")
+local util = require("ninetyfive.util")
 
 local Websocket = {}
 
@@ -291,16 +292,6 @@ function Websocket.reject()
     completion_state.reject()
 end
 
-local function get_cursor_prefix(bufnr, cursor)
-    if not vim.api.nvim_buf_is_valid(bufnr) then
-        return ""
-    end
-
-    local prefix = vim.api.nvim_buf_get_text(bufnr, 0, 0, cursor[1] - 1, cursor[2], {})
-    local text = table.concat(prefix, "\n")
-    return text
-end
-
 -- Function to set up autocommands related to websocket functionality
 function Websocket.setup_autocommands()
     -- Create an autogroup for Ninetyfive
@@ -347,7 +338,7 @@ function Websocket.setup_autocommands()
 
             -- Get current prefix (text before cursor)
             local cursor = vim.api.nvim_win_get_cursor(0)
-            local current_prefix = get_cursor_prefix(bufnr, cursor)
+            local current_prefix = util.get_cursor_prefix(bufnr, cursor)
 
             -- Check if user is typing part of the current completion
             local current_completion = Completion.get()
