@@ -18,18 +18,6 @@ local state = {
 
 local path_sep = package.config:sub(1, 1)
 
-local function get_current_completion()
-    return completion_state.get_current_completion()
-end
-
-local function set_current_completion(value)
-    completion_state.set_current_completion(value)
-end
-
-local function set_buffer(value)
-    completion_state.set_buffer(value)
-end
-
 local function build_relative_path(bufname, git_root)
     if not bufname or bufname == "" then
         return ""
@@ -76,7 +64,7 @@ local function handle_message(parsed)
         return
     end
 
-    local current_completion = get_current_completion()
+    local current_completion = completion_state.get_current_completion()
     if not current_completion then
         return
     end
@@ -100,20 +88,8 @@ local function handle_message(parsed)
         end
     end
 
-    if parsed.edits then
-        current_completion.edits = parsed.edits
-    end
-
-    if parsed.edit_description then
-        current_completion.edit_description = parsed.edit_description
-    end
-
     if parsed.active ~= nil then
         current_completion.is_active = parsed.active
-    end
-
-    if parsed["end"] then
-        current_completion:close()
     end
 end
 
@@ -248,8 +224,8 @@ local function start_request(payload)
                     "SSE request exited with code " .. tostring(code)
                 )
                 suggestion.clear()
-                set_current_completion(nil)
-                set_buffer(nil)
+                completion_state.set_current_completion(nil)
+                completion_state.set_buffer(nil)
             end
         end,
         stdout_buffered = false,
@@ -296,7 +272,7 @@ function Sse.request_completion(args)
         return
     end
 
-    if get_current_completion() ~= nil then
+    if completion_state.get_current_completion() ~= nil then
         return
     end
 
@@ -340,8 +316,8 @@ function Sse.request_completion(args)
 
     local request_id = tostring(os.time()) .. "_" .. tostring(math.random(1000, 9999))
 
-    set_buffer(bufnr)
-    set_current_completion(completion.new(request_id))
+    completion_state.set_buffer(bufnr)
+    completion_state.set_current_completion(completion.new(request_id))
 
     local payload = {
         user_id = state.user_id,
@@ -353,8 +329,8 @@ function Sse.request_completion(args)
     }
 
     if not start_request(payload) then
-        set_current_completion(nil)
-        set_buffer(nil)
+        completion_state.set_current_completion(nil)
+        completion_state.set_buffer(nil)
     end
 end
 
@@ -364,7 +340,7 @@ function Sse.shutdown()
         vim.fn.jobstop(state.current_job)
         state.current_job = nil
     end
-    completion_state.clear()
+    -- completion_state.clear()
     completion_state.clear_suggestion()
     completion_state.set_buffer(nil)
     completion_state.set_active_text(nil)
@@ -468,7 +444,7 @@ function Sse.setup_autocommands()
         group = group,
         callback = function(args)
             completion_state.clear_suggestion()
-            completion_state.clear()
+            -- completion_state.clear()
             vim.b[args.buf].ninetyfive_accepting = false
         end,
     })

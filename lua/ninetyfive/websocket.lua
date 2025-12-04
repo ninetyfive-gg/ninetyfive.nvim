@@ -1,5 +1,5 @@
 local log = require("ninetyfive.util.log")
-local completion = require("ninetyfive.completion")
+local Completion = require("ninetyfive.completion")
 local git = require("ninetyfive.git")
 local suggestion = require("ninetyfive.suggestion")
 local completion_state = require("ninetyfive.completion_state")
@@ -13,30 +13,6 @@ local Websocket = {}
 local reconnect_attempts = 0
 local max_reconnect_attempts = 300
 local reconnect_delay = 1000
-
-local function get_current_completion()
-    return completion_state.get_current_completion()
-end
-
-local function set_current_completion(value)
-    completion_state.set_current_completion(value)
-end
-
-local function get_buffer()
-    return completion_state.get_buffer()
-end
-
-local function set_buffer(value)
-    completion_state.set_buffer(value)
-end
-
-local function get_active_text()
-    return completion_state.get_active_text()
-end
-
-local function set_active_text(value)
-    completion_state.set_active_text(value)
-end
 
 local home = vim.fn.expand("~")
 local cache_path = home .. "/.ninetyfive/consent.json"
@@ -207,10 +183,12 @@ local function set_workspace()
         local bufnr = vim.api.nvim_get_current_buf()
         local curr_text = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
 
-        if get_active_text() ~= curr_text then
-            set_active_text(curr_text)
+        local completion = Completion.get()
+
+        if completion and completion.active_text ~= curr_text then
+            Completion.active_text = curr_text
             send_file_content()
-            completion_state.clear()
+            Completion.clear()
         end
     end
 end
@@ -282,8 +260,8 @@ local function send_file_delta(args)
     end
 end
 
-local function request_completion(args)
-    if get_current_completion() ~= nil then
+local function request_completion(args, curr_text, current_prefix)
+    if Completion.get() ~= nil then
         return
     end
 
@@ -340,7 +318,7 @@ local function request_completion(args)
             -- Generate a request ID
             local request_id = tostring(os.time()) .. "_" .. tostring(math.random(1000, 9999))
 
-            set_buffer(bufnr)
+            Completion.buffer = bufnr
 
             local message = vim.json.encode({
                 type = "delta-completion-request",
@@ -356,7 +334,9 @@ local function request_completion(args)
                     log.debug("websocket", "Failed to send delta-completion-request message")
                 end
 
-                set_current_completion(completion.new(request_id))
+                local current_completion = Completion.new(request_id)
+                current_completion.active_text = curr_text
+                current_completion.prefix = current_prefix
             end)
         end)
     end)
@@ -394,7 +374,7 @@ function Websocket.setup_autocommands()
             end
 
             completion_state.clear_suggestion()
-            completion_state.clear()
+            Completion.clear()
         end,
     })
 
@@ -414,41 +394,56 @@ function Websocket.setup_autocommands()
                 return
             end
 
-            if vim.b[bufnr].ninetyfive_accepting then
-                return
+            -- if vim.b[bufnr].ninetyfive_accepting then
+            --     return
+            -- end
+
+            -- Get current prefix (text before cursor)
+            local cursor = vim.api.nvim_win_get_cursor(0)
+            local line = vim.api.nvim_get_current_line()
+            local current_prefix = line:sub(1, cursor[2])
+
+            -- Check if user is typing part of the current completion
+            local current_completion = Completion.get()
+            if
+                current_completion
+                and current_completion.prefix
+                and current_completion.completion
+            then
+                -- Calculate what the user inserted since last completion request
+                local inserted_text = current_prefix:sub(#current_completion.prefix + 1)
+
+                if inserted_text ~= "" then
+                    -- Build the completion text up to the next nil
+                    local completion_text = ""
+                    for _, segment in ipairs(current_completion.completion) do
+                        if segment == nil then
+                            break
+                        end
+                        completion_text = completion_text .. segment
+                    end
+
+                    -- Check if the completion starts with what the user typed
+                    if completion_text:sub(1, #inserted_text) == inserted_text then
+                        -- User is typing part of the current completion, don't request new completion
+                        print("PRINTED GOOD DONT REQUEST, SHOULD RERENDER")
+                        return
+                    end
+                end
             end
 
-            completion_state.clear_suggestion()
-            completion_state.clear()
+            -- completion_state.clear_suggestion()
+            -- completion_state.clear()
 
             vim.schedule(function()
                 local curr_text =
                     table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
-                if get_active_text() == nil then
-                    send_file_content()
-                    completion_state.clear()
-                else
-                    send_file_content()
+                send_file_content()
 
-                    if
-                        get_current_completion()
-                        and get_current_completion().is_closed
-                        and get_current_completion().consumed
-                            == get_current_completion():length()
-                    then
-                        -- we have consumed the completion we're not in edit mode
-                        if not get_current_completion().is_active then
-                            completion_state.clear()
-                        end
-                        --TODO this is missing the edit case
-                    else
-                        completion_state.clear()
-                    end
-                end
+                -- current_completion.active_text = curr_text
+                -- current_completion.prefix = current_prefix
 
-                set_active_text(curr_text)
-
-                request_completion(args)
+                request_completion(args, curr_text, current_prefix)
             end)
         end,
     })
@@ -506,7 +501,7 @@ function Websocket.setup_autocommands()
         callback = function(args)
             -- We dont need to display suggestions when the user leaves insert mode
             completion_state.clear_suggestion()
-            completion_state.clear()
+            Completion.clear()
             vim.b[args.buf].ninetyfive_accepting = false
         end,
     })
@@ -700,11 +695,24 @@ function Websocket.setup_connection(server_uri, user_id, api_key)
                             end
                         end
                     else
-                        local c = get_current_completion()
-                        if c and c.request_id == parsed.r then
-                            if parsed.v and parsed.v ~= vim.NIL then
-                                table.insert(c.completion, parsed)
+                        local c = Completion.get()
+                        if c then
+                            if c.request_id ~= parsed.r then
+                                return
                             end
+
+                            if parsed.v and parsed.v ~= vim.NIL then
+                                table.insert(c.completion, parsed.v)
+                                c.is_active = true
+                            end
+
+                            if parsed.flush == true or parsed["end"] == true then
+                                table.insert(c.completion, nil)
+                                if parsed["end"] == true then
+                                    c.is_active = false
+                                end
+                            end
+
                             suggestion.show(c.completion)
                         end
                     end
@@ -738,7 +746,7 @@ function Websocket.setup_connection(server_uri, user_id, api_key)
 end
 
 function Websocket.get_completion()
-    local c = get_current_completion()
+    local c = Completion.get()
     if c == nil then
         return ""
     end

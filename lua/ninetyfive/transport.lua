@@ -23,16 +23,16 @@ local function enable_websocket(server_uri, user_id, api_key)
 end
 
 local function enable_sse(server_uri, user_id, api_key)
-    local ok = sse.setup({
-        server_uri = server_uri,
-        user_id = user_id,
-        api_key = api_key,
-    })
+    -- local ok = sse.setup({
+    --     server_uri = server_uri,
+    --     user_id = user_id,
+    --     api_key = api_key,
+    -- })
 
-    if ok then
-        mode = "sse"
-        return true
-    end
+    -- if ok then
+    --     mode = "sse"
+    --     return true
+    -- end
 
     return false
 end
@@ -46,7 +46,7 @@ function Transport.is_sse()
 end
 
 function Transport.shutdown()
-    sse.shutdown()
+    -- sse.shutdown()
     websocket.shutdown()
     mode = nil
 end
@@ -101,7 +101,7 @@ end
 
 function Transport.setup_autocommands()
     if mode == "sse" then
-        sse.setup_autocommands()
+        -- sse.setup_autocommands()
     elseif mode == "websocket" then
         websocket.setup_autocommands()
     end

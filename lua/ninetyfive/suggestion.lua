@@ -11,10 +11,10 @@ suggestion.show = function(completion)
     local parts = {}
     if type(completion) == "table" then
         for _, item in ipairs(completion) do
-            if item.v and item.v ~= vim.NIL then
-                table.insert(parts, tostring(item.v))
+            if item then
+                table.insert(parts, tostring(item))
             end
-            if item.flush then
+            if item == nil then -- its a flush!
                 break
             end
         end
