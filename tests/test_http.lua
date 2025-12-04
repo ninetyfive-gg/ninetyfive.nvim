@@ -188,9 +188,17 @@ T["makes real HTTP request with libcurl without crashing"] = function()
     -- Verify requests completed - allow server errors (5xx) due to httpbin flakiness
     for i, result in ipairs(results) do
         -- ok=true means libcurl completed without crashing
-        MiniTest.expect.equality(result.ok, true, "Request " .. i .. " should complete without crashing")
+        MiniTest.expect.equality(
+            result.ok,
+            true,
+            "Request " .. i .. " should complete without crashing"
+        )
         -- Accept any valid HTTP status (2xx, 4xx, 5xx) - we just care it didn't segfault
-        MiniTest.expect.equality(type(result.status), "number", "Request " .. i .. " should return a status code")
+        MiniTest.expect.equality(
+            type(result.status),
+            "number",
+            "Request " .. i .. " should return a status code"
+        )
     end
 end
 
