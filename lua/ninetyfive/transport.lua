@@ -3,6 +3,7 @@ local websocket = require("ninetyfive.websocket")
 local sse = require("ninetyfive.sse")
 local completion_state = require("ninetyfive.completion_state")
 local Completion = require("ninetyfive.completion")
+local suggestion = require("ninetyfive.suggestion")
 
 local Transport = {}
 
@@ -118,7 +119,7 @@ function Transport.clear()
 end
 
 function Transport.accept()
-    completion_state.accept()
+    suggestion.accept()
 end
 
 function Transport.reject()

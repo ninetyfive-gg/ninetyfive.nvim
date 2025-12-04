@@ -29,19 +29,6 @@ function CompletionState.get_completion_chunks()
     return current_completion.completion
 end
 
-function CompletionState.accept()
-    local current_completion1 = Completion.get()
-    if
-        current_completion1 ~= nil
-        and #current_completion1.completion > 0
-        and current_completion1.buffer == vim.api.nvim_get_current_buf()
-    then
-        local bufnr = vim.api.nvim_get_current_buf()
-        vim.b[bufnr].ninetyfive_accepting = true
-        suggestion.accept(current_completion1)
-    end
-end
-
 function CompletionState.reject()
     suggestion.clear()
 end
