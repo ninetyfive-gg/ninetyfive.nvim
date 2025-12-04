@@ -14,6 +14,7 @@ function Completion.new(request_id)
     self.buffer = nil
     self.active_text = nil
     self.prefix = ""
+    self.last_accepted = ""
 
     -- Set as the global completion
     current_completion = self

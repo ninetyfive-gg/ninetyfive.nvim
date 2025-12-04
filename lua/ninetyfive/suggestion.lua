@@ -105,6 +105,17 @@ suggestion.accept = function(current_completion)
     -- Retrieve the extmark and get the suggestion from it
     local extmark = vim.api.nvim_buf_get_extmark_by_id(bufnr, ninetyfive_ns, 1, { details = true })
 
+    local completion_text = ""
+    for i = 1, #current_completion.completion do
+        local item = current_completion.completion[i]
+        if item == vim.NIL then -- Stop at first nil
+            break
+        end
+        completion_text = completion_text .. tostring(item)
+    end
+
+    current_completion.last_accepted = completion_text
+
     if extmark and #extmark > 0 then
         local line, col = extmark[1], extmark[2]
         local details = extmark[3]
@@ -184,10 +195,11 @@ suggestion.accept = function(current_completion)
 
         local updated_completion = consumeChars(current_completion.completion, count)
 
-        table.insert(updated_completion, 1, "\n")
         local c = Completion.get()
         c.completion = updated_completion
         if #updated_completion > 0 then
+            table.insert(updated_completion, 1, "\n") -- idk if this is the right place...
+            vim.b[bufnr].ninetyfive_accepting = true
             suggestion.show(updated_completion)
         else
             vim.b[bufnr].ninetyfive_accepting = false

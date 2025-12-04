@@ -396,9 +396,11 @@ function Websocket.setup_autocommands()
             end
 
             -- I probably do need this because of the accept that triggers this fn
-            if vim.b[bufnr].ninetyfive_accepting then
-                return
-            end
+            -- BUT THIS MFER is still a bug god damnit
+            -- TODO what if i store what i accepted and here check
+            -- if vim.b[bufnr].ninetyfive_accepting then
+            --     return
+            -- end
 
             -- Get current prefix (text before cursor)
             local cursor = vim.api.nvim_win_get_cursor(0)
@@ -417,18 +419,28 @@ function Websocket.setup_autocommands()
             then
                 -- Calculate what the user inserted since last completion request
                 local inserted_text = current_prefix:sub(#current_completion.prefix + 1)
-                print("inserted " .. inserted_text)
+                print("inserted " .. inserted_text:gsub("\n", "\\n"))
                 if inserted_text ~= "" then
                     -- Build the completion text up to the next nil
                     local completion_text = ""
-                    for _, segment in ipairs(current_completion.completion) do
-                        if segment == vim.NIL then
+                    for i = 1, #current_completion.completion do
+                        local item = current_completion.completion[i]
+                        if item == vim.NIL then -- Stop at first nil
                             break
                         end
-                        completion_text = completion_text .. segment
+                        completion_text = completion_text .. tostring(item)
+                        -- print(tostring(item))
                     end
+                    -- for _, segment in ipairs(current_completion.completion) do
+                    --     if segment == vim.NIL then
+                    --         break
+                    --     end
+                    --     completion_text = completion_text .. segment
+                    -- end
 
                     -- Check if the completion starts with what the user typed
+                    print("completion " .. completion_text)
+                    print("accepted " .. current_completion.last_accepted)
                     if completion_text:sub(1, #inserted_text) == inserted_text then
                         -- User is typing part of the current completion, don't request new completion
 
@@ -465,6 +477,11 @@ function Websocket.setup_autocommands()
                         suggestion.clear()
                         suggestion.show(new_completion)
 
+                        return
+                    elseif inserted_text == current_completion.last_accepted then
+                        --TODO this is still not enough bruh
+                        print("we just inserted from accepting!")
+                        current_completion.last_accepted = ""
                         return
                     end
                 end
