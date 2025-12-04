@@ -27,14 +27,11 @@ suggestion.showInsertSuggestion = function(start_pos, end_pos, message)
     local buf = vim.api.nvim_get_current_buf()
     local start_line, start_col = get_pos_from_index(buf, start_pos)
 
-    -- Clear previous highlights in the namespace
     vim.api.nvim_buf_clear_namespace(buf, ninetyfive_edit_ns, 0, -1)
 
-    -- Trim trailing newlines and split the message into lines
     message = message:gsub("\n+$", "")
     local message_lines = vim.fn.split(message, "\n")
 
-    -- Create virtual lines for the suggestion, filtering out empty lines
     local virt_lines = {}
     for _, line in ipairs(message_lines) do
         if line ~= "" then
@@ -42,9 +39,7 @@ suggestion.showInsertSuggestion = function(start_pos, end_pos, message)
         end
     end
 
-    -- Only create an extmark if there are non-empty lines to show
     if #virt_lines > 0 then
-        -- Create an extmark with virtual lines that appear below the start position
         vim.api.nvim_buf_set_extmark(buf, ninetyfive_edit_ns, start_line, start_col, {
             virt_lines = virt_lines,
             virt_lines_above = true,
@@ -124,14 +119,11 @@ suggestion.showUpdateSuggestion = function(start_pos, end_pos, message)
     local start_line, start_col = get_pos_from_index(buf, start_pos)
     local end_line, end_col = get_pos_from_index(buf, end_pos)
 
-    -- Clear previous highlights in the namespace
     vim.api.nvim_buf_clear_namespace(buf, ninetyfive_edit_ns, 0, -1)
 
-    -- Then overlay the message text on top of the range
     local message_lines = vim.fn.split(message, "\n")
     local num_lines = end_line - start_line + 1
 
-    -- Handle the case where message has more or fewer lines than the range
     local lines_to_show = math.min(#message_lines, num_lines)
 
     for i = 1, lines_to_show do
@@ -139,22 +131,19 @@ suggestion.showUpdateSuggestion = function(start_pos, end_pos, message)
         local current_line = start_line + i - 1
         local current_col = 0
 
-        -- For the first line, use start_col
         if i == 1 then
             current_col = start_col
         end
 
-        -- For the LAST line, append the tail (if it exists)
         if i == #message_lines and i == lines_to_show and current_line == end_line then
             local end_line_text = vim.api.nvim_buf_get_lines(buf, end_line, end_line + 1, false)[1]
                 or ""
             local tail = end_line_text:sub(end_col + 1)
             if tail ~= "" then
-                line_text = line_text .. tail -- Append tail to the last error line
+                line_text = line_text .. tail
             end
         end
 
-        -- Create an extmark for each line with overlay text
         vim.api.nvim_buf_set_extmark(buf, ninetyfive_edit_ns, current_line, current_col, {
             virt_text = { { line_text, "DiffChange" } },
             virt_text_pos = "overlay",
@@ -213,11 +202,42 @@ suggestion.show = function(completion)
     local line = cursor[1] - 1
     local col = cursor[2]
 
+    local current_line_text = vim.api.nvim_buf_get_lines(bufnr, line, line + 1, false)[1] or ""
+    local rest_of_line = current_line_text:sub(col + 1)
+
+    local completion_lines = vim.fn.split(text, "\n", true)
+
+    -- find if any suffix matches the start of rest_of_line
+    if #completion_lines > 0 and #rest_of_line > 0 then
+        local first_line = completion_lines[1]
+        for i = 1, #first_line do
+            local suffix = first_line:sub(i)
+            if rest_of_line:sub(1, #suffix) == suffix then
+                -- keep only the part before the matching suffix
+                completion_lines[1] = first_line:sub(1, i - 1)
+                break
+            end
+        end
+    end
+
     -- Clear any existing extmarks in the buffer
     vim.api.nvim_buf_clear_namespace(bufnr, ninetyfive_ns, 0, -1)
 
+    -- check if there's anything left to show
+    local has_content = false
+    for _, l in ipairs(completion_lines) do
+        if #l > 0 then
+            has_content = true
+            break
+        end
+    end
+
+    if not has_content then
+        return
+    end
+
     local virt_lines = {}
-    for _, l in ipairs(vim.fn.split(text, "\n", true)) do
+    for _, l in ipairs(completion_lines) do
         table.insert(virt_lines, { { l, "Comment" } })
     end
     local first_line = table.remove(virt_lines, 1) or { { "", "Comment" } }
@@ -273,7 +293,6 @@ suggestion.accept = function(current_completion)
     end
 
     local bufnr = vim.api.nvim_get_current_buf()
-    -- Retrieve the extmark and get the suggestion from it
     local extmark =
         vim.api.nvim_buf_get_extmark_by_id(bufnr, ninetyfive_ns, completion_id, { details = true })
 
@@ -289,7 +308,6 @@ suggestion.accept = function(current_completion)
             end
         end
 
-        -- Add the rest of the lines from virt_lines
         if details.virt_lines then
             for _, virt_line in ipairs(details.virt_lines) do
                 extmark_text = extmark_text .. "\n"
@@ -299,7 +317,6 @@ suggestion.accept = function(current_completion)
             end
         end
 
-        -- Remove the suggestion
         vim.api.nvim_buf_del_extmark(bufnr, ninetyfive_ns, completion_id)
 
         local new_line, new_col = line, col
@@ -307,13 +324,11 @@ suggestion.accept = function(current_completion)
         if string.find(extmark_text, "\n") then
             local lines = vim.split(extmark_text, "\n", { plain = true, trimempty = false })
 
-            -- Insert the first line at the cursor position
             if #lines > 0 then
                 vim.api.nvim_buf_set_text(bufnr, line, col, line, col, { lines[1] })
                 new_col = col + #lines[1]
             end
 
-            -- Insert the rest of the lines as new lines
             if #lines > 1 then
                 local new_lines = {}
                 for i = 2, #lines do
@@ -325,21 +340,26 @@ suggestion.accept = function(current_completion)
                 new_col = #lines[#lines]
             end
         else
-            local line_text = vim.api.nvim_buf_get_lines(bufnr, line, line + 1, false)[1] or ""
-            local virt_width = 0
-            if details.virt_text then
-                for _, part in ipairs(details.virt_text) do
-                    virt_width = virt_width + vim.fn.strdisplaywidth(part[1])
-                end
-            end
-
-            local end_col = math.min(#line_text, col + virt_width)
-
-            vim.api.nvim_buf_set_text(bufnr, line, col, line, end_col, { extmark_text })
+            -- just insert the text, don't replace anything
+            vim.api.nvim_buf_set_text(bufnr, line, col, line, col, { extmark_text })
             new_col = col + #extmark_text
         end
 
         vim.api.nvim_win_set_cursor(0, { new_line + 1, new_col })
+
+        local current_line_text = vim.api.nvim_buf_get_lines(bufnr, new_line, new_line + 1, false)[1] or ""
+        local rest_of_line = current_line_text:sub(new_col + 1)
+        local is_mid_line = #vim.trim(rest_of_line) > 0
+
+        if is_mid_line then
+            -- defer this reset to the next tick so that TextChangedI doesn't render mid line again...
+            -- this works, trust me.
+            vim.schedule(function()
+                vim.b[bufnr].ninetyfive_accepting = false
+            end)
+            completion_id = ""
+            return
+        end
 
         -- after accept, slice the original array
         local has_remaining = false
@@ -381,7 +401,6 @@ suggestion.accept = function(current_completion)
                 suggestion.show(current_completion.completion)
             end, 10)
         else
-            -- do a reset once no completions exist
             vim.b[bufnr].ninetyfive_accepting = false
             completion_id = ""
         end
