@@ -134,6 +134,10 @@ function CommunicationAutocmds:setup_autocommands()
             if vim.b[args.buf].ninetyfive_accepting then
                 return
             end
+
+            -- TODO I think this may need more guards?
+            Completion.clear()
+            suggestion.clear()
         end,
     })
 
