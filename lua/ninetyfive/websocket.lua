@@ -358,6 +358,16 @@ function Websocket.reject()
     completion_state.reject()
 end
 
+local function get_cursor_prefix(bufnr, cursor)
+    if not vim.api.nvim_buf_is_valid(bufnr) then
+        return ""
+    end
+
+    local prefix = vim.api.nvim_buf_get_text(bufnr, 0, 0, cursor[1] - 1, cursor[2], {})
+    local text = table.concat(prefix, "\n")
+    return text
+end
+
 -- Function to set up autocommands related to websocket functionality
 function Websocket.setup_autocommands()
     -- Create an autogroup for Ninetyfive
@@ -404,8 +414,7 @@ function Websocket.setup_autocommands()
 
             -- Get current prefix (text before cursor)
             local cursor = vim.api.nvim_win_get_cursor(0)
-            local line = vim.api.nvim_get_current_line()
-            local current_prefix = line:sub(1, cursor[2])
+            local current_prefix = get_cursor_prefix(bufnr, cursor)
 
             -- Check if user is typing part of the current completion
             local current_completion = Completion.get()
@@ -439,8 +448,11 @@ function Websocket.setup_autocommands()
                     -- end
 
                     -- Check if the completion starts with what the user typed
-                    print("completion " .. completion_text)
+                    print("completion " .. completion_text:gsub("\n", "\\n"))
                     print("accepted " .. current_completion.last_accepted)
+                    print("in " .. inserted_text:gsub("\n", "\\n"):gsub("\t", "\\t"):gsub(" ", "\\s") .."!")
+                    print("co " .. completion_text:sub(1, #inserted_text):gsub("\n", "\\n"):gsub("\t", "\\t"):gsub(" ", "\\s").."!")
+                    print(completion_text:sub(1, #inserted_text) == inserted_text)
                     if completion_text:sub(1, #inserted_text) == inserted_text then
                         -- User is typing part of the current completion, don't request new completion
 
@@ -479,8 +491,10 @@ function Websocket.setup_autocommands()
 
                         return
                     elseif inserted_text == current_completion.last_accepted then
-                        --TODO this is still not enough bruh
+                        -- Extend prefix so future comparisons ignore the accepted chunk
                         print("we just inserted from accepting!")
+                        current_completion.prefix = current_completion.prefix
+                            .. current_completion.last_accepted
                         current_completion.last_accepted = ""
                         return
                     end
