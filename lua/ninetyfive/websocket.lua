@@ -249,11 +249,7 @@ local function request_completion(args, curr_text, current_prefix)
                 end
             end
 
-            -- Generate a request ID
             local request_id = tostring(os.time()) .. "_" .. tostring(math.random(1000, 9999))
-
-            -- TODO mm maybe just set it on `current_completion` down there when we create it?
-            -- Completion.buffer = bufnr
 
             local message = vim.json.encode({
                 type = "delta-completion-request",
