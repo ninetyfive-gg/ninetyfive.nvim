@@ -1,5 +1,5 @@
 local log = require("ninetyfive.util.log")
-local transport = require("ninetyfive.transport")
+local Completion = require("ninetyfive.completion")
 
 local Ninetyfive = {}
 
@@ -78,7 +78,7 @@ local function register_mappings(options, mappings)
         if name == "accept" then
             opts.expr = true
             vim.keymap.set("i", key, function()
-                if transport.has_active and transport.has_active() then
+                if Completion.has_active_completion() then
                     return "<Cmd>NinetyFiveAccept<CR>"
                 else
                     return vim.fn.pumvisible() == 1 and "<C-n>" or "<Tab>"

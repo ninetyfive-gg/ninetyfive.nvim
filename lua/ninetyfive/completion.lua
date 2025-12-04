@@ -27,6 +27,12 @@ function Completion.get()
     return current_completion
 end
 
+function Completion.has_active_completion()
+    return current_completion
+        and current_completion.completion
+        and #current_completion.completion > 0
+end
+
 -- Clear the global completion
 function Completion.clear()
     print("whos clearing")
