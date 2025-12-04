@@ -2,6 +2,7 @@ local log = require("ninetyfive.util.log")
 local websocket = require("ninetyfive.websocket")
 local sse = require("ninetyfive.sse")
 local completion_state = require("ninetyfive.completion_state")
+local Completion = require("ninetyfive.completion")
 
 local Transport = {}
 
@@ -108,7 +109,8 @@ function Transport.setup_autocommands()
 end
 
 function Transport.has_active()
-    return completion_state.has_active()
+    local completion = Completion.get()
+    return completion and #completion.completion > 0
 end
 
 function Transport.clear()

@@ -9,6 +9,7 @@ local log = require("ninetyfive.util.log")
 suggestion.show = function(completion)
     -- build text up to the next flush
     local parts = {}
+    print("show")
     if type(completion) == "table" then
         for i = 1, #completion do
             local item = completion[i]
@@ -68,6 +69,35 @@ function suggestion.get_current_extmark_position(bufnr)
     return { row = mark[1], col = mark[2] }
 end
 
+local function consumeChars(array, count)
+    local consumed = 0
+    local i = 1
+
+    while consumed < count and i <= #array do
+        if array[i] ~= nil then
+            local len = #array[i]
+
+            if consumed + len <= count then
+                -- Consume the entire string
+                consumed = consumed + len
+                table.remove(array, i)
+                -- Don't increment i since we removed an element
+            else
+                -- Consume part of the string
+                local remaining = count - consumed
+                array[i] = string.sub(array[i], remaining + 1)
+                consumed = count
+                break
+            end
+        else
+            -- Skip nil elements
+            i = i + 1
+        end
+    end
+
+    return array
+end
+
 suggestion.accept = function(current_completion)
     if completion_id == "" then
         return
@@ -75,8 +105,7 @@ suggestion.accept = function(current_completion)
 
     local bufnr = vim.api.nvim_get_current_buf()
     -- Retrieve the extmark and get the suggestion from it
-    local extmark =
-        vim.api.nvim_buf_get_extmark_by_id(bufnr, ninetyfive_ns, completion_id, { details = true })
+    local extmark = vim.api.nvim_buf_get_extmark_by_id(bufnr, ninetyfive_ns, 1, { details = true })
 
     if extmark and #extmark > 0 then
         local line, col = extmark[1], extmark[2]
@@ -101,7 +130,7 @@ suggestion.accept = function(current_completion)
         end
 
         -- Remove the suggestion
-        vim.api.nvim_buf_del_extmark(bufnr, ninetyfive_ns, completion_id)
+        vim.api.nvim_buf_del_extmark(bufnr, ninetyfive_ns, 1)
 
         local new_line, new_col = line, col
 
@@ -142,51 +171,76 @@ suggestion.accept = function(current_completion)
 
         vim.api.nvim_win_set_cursor(0, { new_line + 1, new_col })
 
-        -- after accept, slice the original array
-        local has_remaining = false
-        if current_completion and type(current_completion.completion) == "table" then
-            local arr = current_completion.completion
-            local flush_idx = nil
+        -- TODO currently, i accept and this count is 0?
+        -- plus the code above inserts text... which triggers the Insert autocmd...
 
-            for i, item in ipairs(arr) do
-                if item.flush == true then
-                    flush_idx = i
+        -- count how many we accept
+        local count = 0
+        if type(current_completion) == "table" then
+            for i = 1, #current_completion do
+                local item = current_completion[i]
+                if item == vim.NIL then -- Stop at first nil
                     break
                 end
-            end
-
-            if flush_idx then
-                local old_len = #arr
-                local new_len = old_len - flush_idx
-
-                for i = 1, new_len do
-                    arr[i] = arr[i + flush_idx]
-                end
-
-                for i = old_len, new_len + 1, -1 do
-                    arr[i] = nil
-                end
-
-                if #arr > 0 then
-                    has_remaining = true
-                end
-            else
-                for i = #arr, 1, -1 do
-                    arr[i] = nil
-                end
+                count = count + #item
             end
         end
 
-        if has_remaining then
-            vim.defer_fn(function()
-                suggestion.show(current_completion.completion)
-            end, 10)
+        print("consme " .. count)
+        local updated_completion = consumeChars(current_completion, count)
+        if #updated_completion > 0 then
+            suggestion.show(updated_completion)
         else
-            -- do a reset once no completions exist
             vim.b[bufnr].ninetyfive_accepting = false
             completion_id = ""
             completion_bufnr = nil
         end
+
+        -- after accept, slice the original array
+        -- local has_remaining = false
+        -- if current_completion and type(current_completion.completion) == "table" then
+        --     local arr = current_completion.completion
+        --     local flush_idx = nil
+
+        --     for i, item in ipairs(arr) do
+        --         if item.flush == true then
+        --             flush_idx = i
+        --             break
+        --         end
+        --     end
+
+        --     if flush_idx then
+        --         local old_len = #arr
+        --         local new_len = old_len - flush_idx
+
+        --         for i = 1, new_len do
+        --             arr[i] = arr[i + flush_idx]
+        --         end
+
+        --         for i = old_len, new_len + 1, -1 do
+        --             arr[i] = nil
+        --         end
+
+        --         if #arr > 0 then
+        --             has_remaining = true
+        --         end
+        --     else
+        --         for i = #arr, 1, -1 do
+        --             arr[i] = nil
+        --         end
+        --     end
+        -- end
+
+        -- if has_remaining then
+        --     vim.defer_fn(function()
+        --         suggestion.show(current_completion.completion)
+        --     end, 10)
+        -- else
+        --     -- do a reset once no completions exist
+        --     vim.b[bufnr].ninetyfive_accepting = false
+        --     completion_id = ""
+        --     completion_bufnr = nil
+        -- end
     end
 end
 

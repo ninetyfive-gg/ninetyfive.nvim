@@ -1,4 +1,5 @@
 local suggestion = require("ninetyfive.suggestion")
+local Completion = require("ninetyfive.completion")
 
 local CompletionState = {}
 
@@ -29,23 +30,16 @@ function CompletionState.get_completion_chunks()
 end
 
 function CompletionState.accept()
+    local current_completion1 = Completion.get()
     if
-        current_completion ~= nil
-        and #current_completion.completion > 0
-        and buffer == vim.api.nvim_get_current_buf()
+        current_completion1 ~= nil
+        and #current_completion1.completion > 0
+        and current_completion1.buffer == vim.api.nvim_get_current_buf()
     then
+        print("accept")
         local bufnr = vim.api.nvim_get_current_buf()
         vim.b[bufnr].ninetyfive_accepting = true
-
-        local built = {}
-        for _, item in ipairs(current_completion.completion) do
-            if item.v and item.v ~= vim.NIL then
-                table.insert(built, tostring(item.v))
-            end
-        end
-        suggestion.accept(current_completion)
-
-        current_completion.is_active = true
+        suggestion.accept(current_completion1)
     end
 end
 

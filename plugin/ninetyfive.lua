@@ -17,6 +17,7 @@ else
     end, { desc = "Toggles the plugin." })
 
     vim.api.nvim_create_user_command("NinetyFiveAccept", function()
+        print("Help")
         require("ninetyfive").accept()
     end, { desc = "Accepts a suggestion." })
 
