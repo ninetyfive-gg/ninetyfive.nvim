@@ -2,7 +2,6 @@ local log = require("ninetyfive.util.log")
 local websocket = require("ninetyfive.websocket")
 local sse = require("ninetyfive.sse")
 local Completion = require("ninetyfive.completion")
-local suggestion = require("ninetyfive.suggestion")
 local git = require("ninetyfive.git")
 local util = require("ninetyfive.util")
 
