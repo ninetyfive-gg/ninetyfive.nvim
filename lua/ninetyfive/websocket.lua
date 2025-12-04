@@ -337,6 +337,7 @@ local function request_completion(args, curr_text, current_prefix)
                 local current_completion = Completion.new(request_id)
                 current_completion.active_text = curr_text
                 current_completion.prefix = current_prefix
+                print("Requested completion " .. current_completion.request_id)
             end)
         end)
     end)
@@ -373,8 +374,8 @@ function Websocket.setup_autocommands()
                 return
             end
 
-            completion_state.clear_suggestion()
-            Completion.clear()
+            -- completion_state.clear_suggestion()
+            -- Completion.clear()
         end,
     })
 
@@ -405,6 +406,9 @@ function Websocket.setup_autocommands()
 
             -- Check if user is typing part of the current completion
             local current_completion = Completion.get()
+            if current_completion == nil then
+                print("nil completion")
+            end
             if
                 current_completion
                 and current_completion.prefix
@@ -412,12 +416,12 @@ function Websocket.setup_autocommands()
             then
                 -- Calculate what the user inserted since last completion request
                 local inserted_text = current_prefix:sub(#current_completion.prefix + 1)
-
+                print("inserted " .. inserted_text)
                 if inserted_text ~= "" then
                     -- Build the completion text up to the next nil
                     local completion_text = ""
                     for _, segment in ipairs(current_completion.completion) do
-                        if segment == nil then
+                        if segment == vim.NIL then
                             break
                         end
                         completion_text = completion_text .. segment
@@ -426,22 +430,53 @@ function Websocket.setup_autocommands()
                     -- Check if the completion starts with what the user typed
                     if completion_text:sub(1, #inserted_text) == inserted_text then
                         -- User is typing part of the current completion, don't request new completion
-                        print("PRINTED GOOD DONT REQUEST, SHOULD RERENDER")
+
+                        local chars_to_remove = #inserted_text
+                        local new_completion = {}
+                        for i, segment in ipairs(current_completion.completion) do
+                            if segment == vim.NIL then
+                                -- Copy the rest of the array including nils
+                                for j = i, #current_completion.completion do
+                                    table.insert(new_completion, current_completion.completion[j])
+                                end
+                                break
+                            end
+
+                            if chars_to_remove >= #segment then
+                                -- Skip this entire segment
+                                chars_to_remove = chars_to_remove - #segment
+                            else
+                                -- Partially consume this segment
+                                local remaining = segment:sub(chars_to_remove + 1)
+                                table.insert(new_completion, remaining)
+                                chars_to_remove = 0
+
+                                -- Copy the rest of the array
+                                for j = i + 1, #current_completion.completion do
+                                    table.insert(new_completion, current_completion.completion[j])
+                                end
+                                break
+                            end
+                        end
+
+                        print("Typing showing suggestion!")
+                        suggestion.clear()
+                        suggestion.show(new_completion)
+
                         return
                     end
                 end
             end
 
-            -- completion_state.clear_suggestion()
-            -- completion_state.clear()
+            print("we should send and request!")
+
+            suggestion.clear()
+            Completion.clear()
 
             vim.schedule(function()
                 local curr_text =
                     table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
                 send_file_content()
-
-                -- current_completion.active_text = curr_text
-                -- current_completion.prefix = current_prefix
 
                 request_completion(args, curr_text, current_prefix)
             end)
@@ -707,7 +742,7 @@ function Websocket.setup_connection(server_uri, user_id, api_key)
                             end
 
                             if parsed.flush == true or parsed["end"] == true then
-                                table.insert(c.completion, nil)
+                                table.insert(c.completion, vim.NIL)
                                 if parsed["end"] == true then
                                     c.is_active = false
                                 end

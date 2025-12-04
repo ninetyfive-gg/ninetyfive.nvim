@@ -10,16 +10,14 @@ suggestion.show = function(completion)
     -- build text up to the next flush
     local parts = {}
     if type(completion) == "table" then
-        for _, item in ipairs(completion) do
-            if item then
-                table.insert(parts, tostring(item))
-            end
-            if item == nil then -- its a flush!
+        for i = 1, #completion do
+            local item = completion[i]
+            if item == vim.NIL then -- Stop at first nil
                 break
             end
+            table.insert(parts, tostring(item))
+            print(tostring(item))
         end
-    elseif type(completion) == "string" then
-        parts = { completion }
     end
 
     local text = table.concat(parts)
@@ -194,6 +192,7 @@ end
 
 suggestion.clear = function()
     local buffer = vim.api.nvim_get_current_buf()
+    print("clear " .. buffer)
     if buffer ~= nil and vim.api.nvim_buf_is_valid(buffer) then
         vim.api.nvim_buf_del_extmark(buffer, ninetyfive_ns, 1)
     end
