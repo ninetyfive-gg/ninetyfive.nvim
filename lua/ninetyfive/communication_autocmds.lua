@@ -136,8 +136,8 @@ function CommunicationAutocmds:setup_autocommands()
             end
 
             -- TODO I think this may need more guards?
-            Completion.clear()
-            suggestion.clear()
+            -- Completion.clear()
+            -- suggestion.clear()
         end,
     })
 
