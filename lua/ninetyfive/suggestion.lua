@@ -1,5 +1,6 @@
 local suggestion = {}
 local ninetyfive_ns = vim.api.nvim_create_namespace("ninetyfive_ghost_ns")
+local Completion = require("ninetyfive.completion")
 
 local completion_id = ""
 local completion_bufnr = nil
@@ -9,7 +10,6 @@ local log = require("ninetyfive.util.log")
 suggestion.show = function(completion)
     -- build text up to the next flush
     local parts = {}
-    print("show")
     if type(completion) == "table" then
         for i = 1, #completion do
             local item = completion[i]
@@ -17,7 +17,7 @@ suggestion.show = function(completion)
                 break
             end
             table.insert(parts, tostring(item))
-            print(tostring(item))
+            -- print(tostring(item))
         end
     end
 
@@ -70,29 +70,26 @@ function suggestion.get_current_extmark_position(bufnr)
 end
 
 local function consumeChars(array, count)
-    local consumed = 0
-    local i = 1
+    local remaining = count
 
-    while consumed < count and i <= #array do
-        if array[i] ~= nil then
-            local len = #array[i]
+    while remaining > 0 and #array > 0 do
+        local chunk = table.remove(array, 1)
 
-            if consumed + len <= count then
-                -- Consume the entire string
-                consumed = consumed + len
-                table.remove(array, i)
-                -- Don't increment i since we removed an element
-            else
-                -- Consume part of the string
-                local remaining = count - consumed
-                array[i] = string.sub(array[i], remaining + 1)
-                consumed = count
-                break
-            end
+        if chunk == vim.NIL then
+            -- Continue to next iteration, nil is already removed
+        elseif #chunk <= remaining then
+            -- Consume the entire chunk
+            remaining = remaining - #chunk
         else
-            -- Skip nil elements
-            i = i + 1
+            -- Consume part of the chunk and put the rest back
+            table.insert(array, 1, string.sub(chunk, remaining + 1))
+            remaining = 0
         end
+    end
+
+    -- Remove any leading nils to expose the next chunk
+    while #array > 0 and array[1] == nil do
+        table.remove(array, 1)
     end
 
     return array
@@ -104,6 +101,7 @@ suggestion.accept = function(current_completion)
     end
 
     local bufnr = vim.api.nvim_get_current_buf()
+    vim.b[bufnr].ninetyfive_accepting = true
     -- Retrieve the extmark and get the suggestion from it
     local extmark = vim.api.nvim_buf_get_extmark_by_id(bufnr, ninetyfive_ns, 1, { details = true })
 
@@ -171,23 +169,24 @@ suggestion.accept = function(current_completion)
 
         vim.api.nvim_win_set_cursor(0, { new_line + 1, new_col })
 
-        -- TODO currently, i accept and this count is 0?
-        -- plus the code above inserts text... which triggers the Insert autocmd...
-
         -- count how many we accept
         local count = 0
-        if type(current_completion) == "table" then
-            for i = 1, #current_completion do
-                local item = current_completion[i]
-                if item == vim.NIL then -- Stop at first nil
+        if type(current_completion.completion) == "table" then
+            for i = 1, #current_completion.completion do
+                local item = current_completion.completion[i]
+                if item == vim.NIL then
+                    count = count + 1 -- we want to consume the nil
                     break
                 end
                 count = count + #item
             end
         end
 
-        print("consme " .. count)
-        local updated_completion = consumeChars(current_completion, count)
+        local updated_completion = consumeChars(current_completion.completion, count)
+
+        table.insert(updated_completion, 1, "\n")
+        local c = Completion.get()
+        c.completion = updated_completion
         if #updated_completion > 0 then
             suggestion.show(updated_completion)
         else

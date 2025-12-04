@@ -36,7 +36,6 @@ function CompletionState.accept()
         and #current_completion1.completion > 0
         and current_completion1.buffer == vim.api.nvim_get_current_buf()
     then
-        print("accept")
         local bufnr = vim.api.nvim_get_current_buf()
         vim.b[bufnr].ninetyfive_accepting = true
         suggestion.accept(current_completion1)

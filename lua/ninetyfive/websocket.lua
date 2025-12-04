@@ -395,9 +395,10 @@ function Websocket.setup_autocommands()
                 return
             end
 
-            -- if vim.b[bufnr].ninetyfive_accepting then
-            --     return
-            -- end
+            -- I probably do need this because of the accept that triggers this fn
+            if vim.b[bufnr].ninetyfive_accepting then
+                return
+            end
 
             -- Get current prefix (text before cursor)
             local cursor = vim.api.nvim_win_get_cursor(0)
@@ -433,6 +434,7 @@ function Websocket.setup_autocommands()
 
                         local chars_to_remove = #inserted_text
                         local new_completion = {}
+
                         for i, segment in ipairs(current_completion.completion) do
                             if segment == vim.NIL then
                                 -- Copy the rest of the array including nils
@@ -736,7 +738,7 @@ function Websocket.setup_connection(server_uri, user_id, api_key)
                                 return
                             end
 
-                            if parsed.v and parsed.v ~= vim.NIL then
+                            if parsed.v and parsed.v ~= vim.NIL and parsed ~= nil then
                                 table.insert(c.completion, parsed.v)
                                 c.is_active = true
                             end
