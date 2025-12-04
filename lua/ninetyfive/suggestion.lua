@@ -6,6 +6,7 @@ local completion_id = ""
 local completion_bufnr = nil
 
 local log = require("ninetyfive.util.log")
+local lsp_util = vim.lsp.util
 
 suggestion.show = function(completion)
     -- build text up to the next flush
@@ -150,27 +151,11 @@ suggestion.accept = function()
 
             local new_line, new_col = line, col
 
-            if string.find(extmark_text, "\n") then
-                local lines = vim.split(extmark_text, "\n", { plain = true, trimempty = false })
+            local has_newline = string.find(extmark_text, "\n") ~= nil
+            local end_line = line
+            local end_col = col
 
-                -- Insert the first line at the cursor position
-                if #lines > 0 then
-                    vim.api.nvim_buf_set_text(bufnr, line, col, line, col, { lines[1] })
-                    new_col = col + #lines[1]
-                end
-
-                -- Insert the rest of the lines as new lines
-                if #lines > 1 then
-                    local new_lines = {}
-                    for i = 2, #lines do
-                        table.insert(new_lines, lines[i])
-                    end
-
-                    vim.api.nvim_buf_set_lines(bufnr, line + 1, line + 1, false, new_lines)
-                    new_line = line + #lines - 1
-                    new_col = #lines[#lines]
-                end
-            else
+            if not has_newline then
                 local line_text = vim.api.nvim_buf_get_lines(bufnr, line, line + 1, false)[1] or ""
                 local virt_width = 0
                 if details.virt_text then
@@ -179,10 +164,36 @@ suggestion.accept = function()
                     end
                 end
 
-                local end_col = math.min(#line_text, col + virt_width)
+                end_col = math.min(#line_text, col + virt_width)
+            end
 
-                vim.api.nvim_buf_set_text(bufnr, line, col, line, end_col, { extmark_text })
-                new_col = col + #extmark_text
+            local offset_encoding = "utf-8"
+            local start_character = lsp_util.character_offset(bufnr, line, col, offset_encoding)
+            local end_character =
+                lsp_util.character_offset(bufnr, end_line, end_col, offset_encoding)
+
+            local ok, err = pcall(lsp_util.apply_text_edits, {
+                {
+                    range = {
+                        start = { line = line, character = start_character },
+                        ["end"] = { line = end_line, character = end_character },
+                    },
+                    newText = extmark_text,
+                },
+            }, bufnr, offset_encoding)
+
+            if not ok then
+                log.error("Failed to apply suggestion: " .. tostring(err))
+                vim.b[bufnr].ninetyfive_accepting = false
+                return
+            end
+
+            local lines = vim.split(extmark_text, "\n", { plain = true, trimempty = false })
+            if #lines > 0 then
+                new_col = (#lines > 1) and #lines[#lines] or (col + #lines[1])
+                if #lines > 1 then
+                    new_line = line + #lines - 1
+                end
             end
 
             vim.api.nvim_win_set_cursor(0, { new_line + 1, new_col })
