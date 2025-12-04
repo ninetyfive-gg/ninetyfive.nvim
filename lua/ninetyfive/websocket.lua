@@ -427,7 +427,7 @@ function Websocket.setup_autocommands()
                 and current_completion.completion
             then
                 -- Calculate what the user inserted since last completion request
-                local inserted_text = current_prefix:sub(#current_completion.prefix + 1)
+                local inserted_text = current_prefix:sub(#current_completion.prefix + 1) --TODO ccant we get rid of +1?
                 print("inserted " .. inserted_text:gsub("\n", "\\n"))
                 if inserted_text ~= "" then
                     -- Build the completion text up to the next nil
@@ -448,11 +448,11 @@ function Websocket.setup_autocommands()
                     -- end
 
                     -- Check if the completion starts with what the user typed
-                    print("completion " .. completion_text:gsub("\n", "\\n"))
-                    print("accepted " .. current_completion.last_accepted)
-                    print("in " .. inserted_text:gsub("\n", "\\n"):gsub("\t", "\\t"):gsub(" ", "\\s") .."!")
-                    print("co " .. completion_text:sub(1, #inserted_text):gsub("\n", "\\n"):gsub("\t", "\\t"):gsub(" ", "\\s").."!")
-                    print(completion_text:sub(1, #inserted_text) == inserted_text)
+                    -- print("completion " .. completion_text:gsub("\n", "\\n"))
+                    -- print("accepted " .. current_completion.last_accepted)
+                    -- print("in " .. inserted_text:gsub("\n", "\\n"):gsub("\t", "\\t"):gsub(" ", "\\s") .."!")
+                    -- print("co " .. completion_text:sub(1, #inserted_text):gsub("\n", "\\n"):gsub("\t", "\\t"):gsub(" ", "\\s").."!")
+                    -- print(completion_text:sub(1, #inserted_text) == inserted_text)
                     if completion_text:sub(1, #inserted_text) == inserted_text then
                         -- User is typing part of the current completion, don't request new completion
 
