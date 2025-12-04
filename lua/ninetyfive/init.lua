@@ -147,6 +147,14 @@ function Ninetyfive.accept()
     transport.accept()
 end
 
+function Ninetyfive.accept_word()
+    transport.accept_word()
+end
+
+function Ninetyfive.accept_line()
+    transport.accept_line()
+end
+
 function Ninetyfive.accept_edit(edit)
     transport.accept_edit()
 end

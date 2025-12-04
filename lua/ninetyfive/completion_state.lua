@@ -89,6 +89,60 @@ function CompletionState.accept_edit()
     end
 end
 
+function CompletionState.accept_word()
+    if
+        current_completion ~= nil
+        and #current_completion.completion > 0
+        and buffer == vim.api.nvim_get_current_buf()
+    then
+        local bufnr = vim.api.nvim_get_current_buf()
+        vim.b[bufnr].ninetyfive_accepting = true
+
+        suggestion.accept_word(current_completion)
+
+        local edit = current_completion:next_edit()
+
+        if not edit then
+            return
+        end
+
+        if edit.type == "insert" then
+            suggestion.showInsertSuggestion(edit.start, edit["end"], edit.text)
+        elseif edit.type == "delete" then
+            suggestion.showDeleteSuggestion(edit)
+        elseif edit.type == "update" then
+            suggestion.showUpdateSuggestion(edit.start, edit["end"], edit.text)
+        end
+    end
+end
+
+function CompletionState.accept_line()
+    if
+        current_completion ~= nil
+        and #current_completion.completion > 0
+        and buffer == vim.api.nvim_get_current_buf()
+    then
+        local bufnr = vim.api.nvim_get_current_buf()
+        vim.b[bufnr].ninetyfive_accepting = true
+
+        suggestion.accept_line(current_completion)
+
+        local edit = current_completion:next_edit()
+
+        if not edit then
+            return
+        end
+
+        if edit.type == "insert" then
+            suggestion.showInsertSuggestion(edit.start, edit["end"], edit.text)
+        elseif edit.type == "delete" then
+            suggestion.showDeleteSuggestion(edit)
+        elseif edit.type == "update" then
+            suggestion.showUpdateSuggestion(edit.start, edit["end"], edit.text)
+        end
+    end
+end
+
 function CompletionState.accept()
     if
         current_completion ~= nil

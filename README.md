@@ -105,6 +105,10 @@ require("ninetyfive").setup({
     enabled = true,
     -- Sets a global mapping to accept a suggestion
     accept = "<Tab>",
+    -- Sets a global mapping to accept a suggestion word
+    accept_word = nil,
+    -- Sets a global mapping to accept a suggestion line
+    accept_line = nil,
     -- Sets a global mapping to accept a suggestion and edit
     accept_edit = "<C-g>",
     -- Sets a global mapping to reject a suggestion
@@ -138,6 +142,8 @@ use {
       mappings = {
         enabled = true,
         accept = "<Tab>",
+        accept_word = "<C-Right>",
+        accept_line = "<C-Down>",
         accept_edit = "<C-g>",
         reject = "<C-w>",
       },
@@ -164,6 +170,8 @@ require("ninetyfive").setup({
   mappings = {
     enabled = true,
     accept = "<Tab>",
+    accept_word = "<C-Right>",
+    accept_line = "<C-Down>",
     accept_edit = "<C-g>",
     reject = "<C-w>",
   },
@@ -191,6 +199,8 @@ return {
       mappings = {
         enabled = true,
         accept = "<Tab>",
+        accept_word = "<C-Right>",
+        accept_line = "<C-Down>",
         accept_edit = "<C-g>",
         reject = "<C-w>",
       },
@@ -213,11 +223,15 @@ Run `:Lazy update ninetyfive` within neovim to pull the latest commits from main
 
 ## Commands
 
-| Command               | Description                                  |
-| --------------------- | -------------------------------------------- |
-| `:NinetyFive`         | Toggles the plugin (for the current session) |
-| `:NinetyFivePurchase` | Redirects to the purchase page               |
-| `:NinetyFiveKey`      | Provide an API key                           |
+| Command                 | Description                                  |
+| ----------------------- | -------------------------------------------- |
+| `:NinetyFive`           | Toggles the plugin (for the current session) |
+| `:NinetyFivePurchase`   | Redirects to the purchase page               |
+| `:NinetyFiveKey`        | Provide an API key                           |
+| `:NinetyFiveAccept`     | Accept the entire current suggestion         |
+| `:NinetyFiveAcceptWord` | Accept one word of the current suggestion    |
+| `:NinetyFiveAcceptLine` | Accept one line of the current suggestion    |
+| `:NinetyFiveAcceptEdit` | Accept the current edit suggestion           |
 
 ## Development
 

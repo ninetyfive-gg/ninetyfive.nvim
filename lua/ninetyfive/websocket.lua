@@ -377,6 +377,14 @@ function Websocket.accept()
     completion_state.accept()
 end
 
+function Websocket.accept_word()
+    completion_state.accept_word()
+end
+
+function Websocket.accept_line()
+    completion_state.accept_line()
+end
+
 function Websocket.reject()
     completion_state.reject()
 end

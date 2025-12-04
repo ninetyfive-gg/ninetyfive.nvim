@@ -18,9 +18,13 @@ Ninetyfive.options = {
     mappings = {
         -- When `true`, creates all the mappings set
         enabled = true,
+
         -- Sets a global mapping to accept a suggestion
         accept = "<Tab>",
         accept_edit = "<C-g>",
+        accept_word = nil,
+        accept_line = nil,
+
         -- Sets a global mapping to reject a suggestion
         reject = "<C-w>",
     },
@@ -84,6 +88,25 @@ local function register_mappings(options, mappings)
                     return vim.fn.pumvisible() == 1 and "<C-n>" or "<Tab>"
                 end
             end, opts)
+        elseif name == "accept_word" then
+            opts.expr = true
+            -- log this event to vim messages
+            vim.keymap.set("i", key, function()
+                if transport.has_active and transport.has_active() then
+                    return "<Cmd>NinetyFiveAcceptWord<CR>"
+                else
+                    return vim.fn.pumvisible() == 1 and "<C-n>" or "<Tab>"
+                end
+            end, opts)
+        elseif name == "accept_line" then
+            opts.expr = true
+            vim.keymap.set("i", key, function()
+                if transport.has_active and transport.has_active() then
+                    return "<Cmd>NinetyFiveAcceptLine<CR>"
+                else
+                    return vim.fn.pumvisible() == 1 and "<C-n>" or "<Tab>"
+                end
+            end, opts)
         else
             vim.keymap.set({ "n", "i" }, key, command, opts)
         end
@@ -102,6 +125,8 @@ function Ninetyfive.setup(options)
 
     register_mappings(Ninetyfive.options.mappings, {
         accept = "<Cmd>NinetyFiveAccept<CR>",
+        accept_word = "<Cmd>NinetyFiveAcceptWord<CR>",
+        accept_line = "<Cmd>NinetyFiveAcceptLine<CR>",
         accept_edit = "<Cmd>NinetyFiveAcceptEdit<CR>",
         reject = "<Cmd>NinetyFiveReject<CR>",
     })
