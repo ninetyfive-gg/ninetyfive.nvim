@@ -1,8 +1,7 @@
 local log = require("ninetyfive.util.log")
 local suggestion = require("ninetyfive.suggestion")
-local completion = require("ninetyfive.completion")
+local Completion = require("ninetyfive.completion")
 local git = require("ninetyfive.git")
-local completion_state = require("ninetyfive.completion_state")
 local ignored_filetypes = require("ninetyfive.ignored_filetypes")
 local global_state = require("ninetyfive.state")
 
@@ -64,7 +63,7 @@ local function handle_message(parsed)
         return
     end
 
-    local current_completion = completion_state.get_current_completion()
+    local current_completion = Completion.get()
     if not current_completion then
         return
     end
@@ -73,27 +72,27 @@ local function handle_message(parsed)
         return
     end
 
-    if parsed.content ~= nil then
-        local chunk = { v = parsed.content }
-        if parsed.flush then
-            chunk.flush = true
-        end
-        table.insert(current_completion.completion, chunk)
-        suggestion.show(current_completion.completion)
-    elseif parsed.flush then
-        local last_item = current_completion.completion[#current_completion.completion]
-        if last_item then
-            last_item.flush = true
-            suggestion.show(current_completion.completion)
+    if parsed.content ~= nil and parsed.content ~= vim.NIL then
+        table.insert(current_completion.completion, parsed.content)
+        current_completion.is_active = true
+        print("concat " .. parsed.content)
+    elseif parsed.flush or parsed["end"] then
+        print("flush")
+        table.insert(current_completion.completion, vim.NIL)
+        if parsed["end"] == true then
+            print("end")
+            current_completion.is_active = false
         end
     end
+    suggestion.show(current_completion.completion)
 
-    if parsed.active ~= nil then
-        current_completion.is_active = parsed.active
-    end
+    -- if parsed.active ~= nil then
+    --     current_completion.is_active = parsed.active
+    -- end
 end
 
 local function start_request(payload)
+    print("start req")
     local ok, encoded = pcall(vim.json.encode, payload)
     if not ok then
         log.notify(
@@ -224,8 +223,7 @@ local function start_request(payload)
                     "SSE request exited with code " .. tostring(code)
                 )
                 suggestion.clear()
-                completion_state.set_current_completion(nil)
-                completion_state.set_buffer(nil)
+                Completion.clear()
             end
         end,
         stdout_buffered = false,
@@ -272,7 +270,9 @@ function Sse.request_completion(args)
         return
     end
 
-    if completion_state.get_current_completion() ~= nil then
+    local current_completion = Completion.get()
+    if current_completion ~= nil then
+        print("not requesting")
         return
     end
 
@@ -316,8 +316,7 @@ function Sse.request_completion(args)
 
     local request_id = tostring(os.time()) .. "_" .. tostring(math.random(1000, 9999))
 
-    completion_state.set_buffer(bufnr)
-    completion_state.set_current_completion(completion.new(request_id))
+    local new_completion = Completion.new(request_id)
 
     local payload = {
         user_id = state.user_id,
@@ -329,8 +328,7 @@ function Sse.request_completion(args)
     }
 
     if not start_request(payload) then
-        completion_state.set_current_completion(nil)
-        completion_state.set_buffer(nil)
+        Completion.clear()
     end
 end
 
@@ -341,9 +339,7 @@ function Sse.shutdown()
         state.current_job = nil
     end
     -- completion_state.clear()
-    completion_state.clear_suggestion()
-    completion_state.set_buffer(nil)
-    completion_state.set_active_text(nil)
+    Completion.clear()
 end
 
 function Sse.setup(opts)
@@ -384,8 +380,7 @@ function Sse.setup_autocommands()
                 return
             end
 
-            completion_state.clear_suggestion()
-            completion_state.clear()
+            Completion.clear()
         end,
     })
 
@@ -408,13 +403,9 @@ function Sse.setup_autocommands()
                 return
             end
 
-            completion_state.clear_suggestion()
-            completion_state.clear()
+            Completion.clear()
 
             vim.schedule(function()
-                local curr_text =
-                    table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
-                completion_state.set_active_text(curr_text)
                 Sse.request_completion(args)
             end)
         end,
@@ -435,16 +426,17 @@ function Sse.setup_autocommands()
                 return
             end
 
-            local curr_text = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
-            completion_state.set_active_text(curr_text)
+            -- local curr_text = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
+            -- local completion = Completion.get()
+            -- completion.active_text = curr_text
         end,
     })
 
     vim.api.nvim_create_autocmd("InsertLeave", {
         group = group,
         callback = function(args)
-            completion_state.clear_suggestion()
-            -- completion_state.clear()
+            suggestion.clear()
+            Completion.clear()
             vim.b[args.buf].ninetyfive_accepting = false
         end,
     })
