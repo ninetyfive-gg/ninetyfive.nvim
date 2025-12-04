@@ -212,6 +212,14 @@ function Ninetyfive.accept()
     suggestion.accept()
 end
 
+function Ninetyfive.accept_word()
+    suggestion.accept_word()
+end
+
+function Ninetyfive.accept_line()
+    suggestion.accept_line()
+end
+
 function Ninetyfive.reject()
     Completion.clear() -- right?
     suggestion.clear()

@@ -50,7 +50,7 @@ suggestion.show = function(completion)
             hl_mode = "combine",
             ephemeral = false,
         }
-    ) -- :h api-extended-marks
+    )
     completion_bufnr = bufnr
 end
 
@@ -96,141 +96,209 @@ local function consumeChars(array, count)
     return array
 end
 
-suggestion.accept = function()
-    local current_completion = Completion.get()
-    if
-        current_completion ~= nil
-        and #current_completion.completion > 0
-        and current_completion.buffer == vim.api.nvim_get_current_buf()
-    then
-        if completion_id == "" then
-            return
+local function collect_completion_text(completion)
+    if type(completion) ~= "table" then
+        return ""
+    end
+
+    local parts = {}
+    for i = 1, #completion do
+        local item = completion[i]
+        if item == vim.NIL then
+            break
+        end
+        parts[#parts + 1] = tostring(item)
+    end
+
+    return table.concat(parts)
+end
+
+local function apply_completion_text(bufnr, line, col, text)
+    if text == "" then
+        return false
+    end
+
+    local has_newline = string.find(text, "\n", 1, true) ~= nil
+    local end_line = line
+    local end_col = col
+
+    if not has_newline then
+        local first_line = text
+        local line_break = string.find(text, "\n", 1, true)
+        if line_break then
+            first_line = string.sub(text, 1, line_break - 1)
         end
 
-        local bufnr = vim.api.nvim_get_current_buf()
-        vim.b[bufnr].ninetyfive_accepting = true
-        -- Retrieve the extmark and get the suggestion from it
-        local extmark =
-            vim.api.nvim_buf_get_extmark_by_id(bufnr, ninetyfive_ns, 1, { details = true })
+        local line_text = vim.api.nvim_buf_get_lines(bufnr, line, line + 1, false)[1] or ""
+        local virt_width = vim.fn.strdisplaywidth(first_line)
+        end_col = math.min(#line_text, col + virt_width)
+    end
 
-        local completion_text = ""
-        for i = 1, #current_completion.completion do
-            local item = current_completion.completion[i]
-            if item == vim.NIL then -- Stop at first nil
-                break
-            end
-            completion_text = completion_text .. tostring(item)
-        end
+    local offset_encoding = "utf-8"
+    local start_character = lsp_util.character_offset(bufnr, line, col, offset_encoding)
+    local end_character = lsp_util.character_offset(bufnr, end_line, end_col, offset_encoding)
 
-        current_completion.last_accepted = completion_text
+    local ok, err = pcall(lsp_util.apply_text_edits, {
+        {
+            range = {
+                start = { line = line, character = start_character },
+                ["end"] = { line = end_line, character = end_character },
+            },
+            newText = text,
+        },
+    }, bufnr, offset_encoding)
 
-        if extmark and #extmark > 0 then
-            local line, col = extmark[1], extmark[2]
-            local details = extmark[3]
+    if not ok then
+        log.error("Failed to apply suggestion: " .. tostring(err))
+        vim.b[bufnr].ninetyfive_accepting = false
+        return false
+    end
 
-            local extmark_text = ""
+    local lines = vim.split(text, "\n", { plain = true, trimempty = false })
+    local new_line = line
+    local new_col = col
 
-            if details.virt_text then
-                for _, part in ipairs(details.virt_text) do
-                    extmark_text = extmark_text .. part[1]
-                end
-            end
-
-            -- Add the rest of the lines from virt_lines
-            if details.virt_lines then
-                for _, virt_line in ipairs(details.virt_lines) do
-                    extmark_text = extmark_text .. "\n"
-                    for _, part in ipairs(virt_line) do
-                        extmark_text = extmark_text .. part[1]
-                    end
-                end
-            end
-
-            -- Remove the suggestion
-            vim.api.nvim_buf_del_extmark(bufnr, ninetyfive_ns, 1)
-
-            local new_line, new_col = line, col
-
-            local has_newline = string.find(extmark_text, "\n") ~= nil
-            local end_line = line
-            local end_col = col
-
-            if not has_newline then
-                local line_text = vim.api.nvim_buf_get_lines(bufnr, line, line + 1, false)[1] or ""
-                local virt_width = 0
-                if details.virt_text then
-                    for _, part in ipairs(details.virt_text) do
-                        virt_width = virt_width + vim.fn.strdisplaywidth(part[1])
-                    end
-                end
-
-                end_col = math.min(#line_text, col + virt_width)
-            end
-
-            local offset_encoding = "utf-8"
-            local start_character = lsp_util.character_offset(bufnr, line, col, offset_encoding)
-            local end_character =
-                lsp_util.character_offset(bufnr, end_line, end_col, offset_encoding)
-
-            local ok, err = pcall(lsp_util.apply_text_edits, {
-                {
-                    range = {
-                        start = { line = line, character = start_character },
-                        ["end"] = { line = end_line, character = end_character },
-                    },
-                    newText = extmark_text,
-                },
-            }, bufnr, offset_encoding)
-
-            if not ok then
-                log.error("Failed to apply suggestion: " .. tostring(err))
-                vim.b[bufnr].ninetyfive_accepting = false
-                return
-            end
-
-            local lines = vim.split(extmark_text, "\n", { plain = true, trimempty = false })
-            if #lines > 0 then
-                new_col = (#lines > 1) and #lines[#lines] or (col + #lines[1])
-                if #lines > 1 then
-                    new_line = line + #lines - 1
-                end
-            end
-
-            vim.api.nvim_win_set_cursor(0, { new_line + 1, new_col })
-
-            -- count how many we accept
-            local count = 0
-            if type(current_completion.completion) == "table" then
-                for i = 1, #current_completion.completion do
-                    local item = current_completion.completion[i]
-                    if item == vim.NIL then
-                        count = count + 1 -- we want to consume the nil
-                        break
-                    end
-                    count = count + #item
-                end
-            end
-
-            local updated_completion = consumeChars(current_completion.completion, count)
-
-            local c = Completion.get()
-            c.completion = updated_completion
-            if #updated_completion > 0 then
-                table.insert(updated_completion, 1, "\n") -- idk if this is the right place...
-                vim.b[bufnr].ninetyfive_accepting = true
-                suggestion.show(updated_completion)
-            else
-                vim.b[bufnr].ninetyfive_accepting = false
-                completion_id = ""
-                completion_bufnr = nil
-            end
+    if #lines > 0 then
+        if #lines > 1 then
+            new_line = line + #lines - 1
+            new_col = #lines[#lines]
+        else
+            new_col = col + #lines[1]
         end
     end
+
+    vim.api.nvim_win_set_cursor(0, { new_line + 1, new_col })
+    return true
+end
+
+local function accept_with_selector(selector)
+    local current_completion = Completion.get()
+    if
+        current_completion == nil
+        or #current_completion.completion == 0
+        or current_completion.buffer ~= vim.api.nvim_get_current_buf()
+    then
+        return
+    end
+
+    if completion_id == "" then
+        return
+    end
+
+    local bufnr = vim.api.nvim_get_current_buf()
+    vim.b[bufnr].ninetyfive_accepting = true
+
+    local extmark = vim.api.nvim_buf_get_extmark_by_id(bufnr, ninetyfive_ns, 1, { details = true })
+    if not extmark or #extmark == 0 then
+        vim.b[bufnr].ninetyfive_accepting = false
+        return
+    end
+
+    local completion_text = collect_completion_text(current_completion.completion)
+    if completion_text == "" then
+        vim.b[bufnr].ninetyfive_accepting = false
+        return
+    end
+
+    local accepted_text = selector(completion_text)
+    if not accepted_text or accepted_text == "" then
+        vim.b[bufnr].ninetyfive_accepting = false
+        return
+    end
+
+    vim.api.nvim_buf_del_extmark(bufnr, ninetyfive_ns, 1)
+
+    local line, col = extmark[1], extmark[2]
+    local applied = apply_completion_text(bufnr, line, col, accepted_text)
+    if not applied then
+        return
+    end
+
+    current_completion.last_accepted = accepted_text
+
+    local accepted_length = #accepted_text
+    local consumed_entire_completion = accepted_length >= #completion_text
+    local consume_count = consumed_entire_completion and (accepted_length + 1) or accepted_length
+
+    local updated_completion = consumeChars(current_completion.completion, consume_count)
+    current_completion.completion = updated_completion
+
+    if #updated_completion > 0 then
+        if consumed_entire_completion then
+            table.insert(updated_completion, 1, "\n")
+        end
+        vim.b[bufnr].ninetyfive_accepting = true
+        suggestion.show(updated_completion)
+    else
+        vim.b[bufnr].ninetyfive_accepting = false
+        completion_id = ""
+        completion_bufnr = nil
+    end
+end
+
+local function select_full_completion(text)
+    return text
+end
+
+local function select_next_word(text)
+    if text == "" then
+        return ""
+    end
+
+    local newline_idx = string.find(text, "\n", 1, true)
+    local limit = newline_idx and (newline_idx - 1) or #text
+    if limit <= 0 then
+        return ""
+    end
+
+    local idx = 1
+    while idx <= limit and string.match(text:sub(idx, idx), "%s") do
+        idx = idx + 1
+    end
+
+    if idx > limit then
+        return string.sub(text, 1, limit)
+    end
+
+    local word_end = idx
+    while word_end <= limit and not string.match(text:sub(word_end, word_end), "%s") do
+        word_end = word_end + 1
+    end
+
+    while word_end <= limit and string.match(text:sub(word_end, word_end), "%s") do
+        word_end = word_end + 1
+    end
+
+    return string.sub(text, 1, word_end - 1)
+end
+
+local function select_line(text)
+    if text == "" then
+        return ""
+    end
+
+    local newline_idx = string.find(text, "\n", 1, true)
+    if newline_idx then
+        return string.sub(text, 1, newline_idx)
+    end
+
+    return text
+end
+
+suggestion.accept = function()
+    accept_with_selector(select_full_completion)
+end
+
+suggestion.accept_word = function()
+    accept_with_selector(select_next_word)
+end
+
+suggestion.accept_line = function()
+    accept_with_selector(select_line)
 end
 
 suggestion.clear = function()
     local buffer = vim.api.nvim_get_current_buf()
-    print("clear " .. buffer)
     if buffer ~= nil and vim.api.nvim_buf_is_valid(buffer) then
         vim.api.nvim_buf_del_extmark(buffer, ninetyfive_ns, 1)
     end
