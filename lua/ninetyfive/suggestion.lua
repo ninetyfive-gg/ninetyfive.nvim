@@ -231,7 +231,7 @@ local function accept_with_selector(selector)
         display_text = completion_text
     end
 
-    local accepted_text = selector(display_text)
+    local accepted_text = selector(display_text, completion_text)
     if not accepted_text or accepted_text == "" then
         vim.b[bufnr].ninetyfive_accepting = false
         return
@@ -312,69 +312,12 @@ local function select_line(text)
     return text
 end
 
+local function select_completion_text(_, completion_text)
+    return completion_text or ""
+end
+
 suggestion.accept = function()
-    local current_completion = Completion.get()
-    if
-        current_completion == nil
-        or #current_completion.completion == 0
-        or current_completion.buffer ~= vim.api.nvim_get_current_buf()
-    then
-        return
-    end
-
-    if completion_id == "" then
-        return
-    end
-
-    local bufnr = vim.api.nvim_get_current_buf()
-    vim.b[bufnr].ninetyfive_accepting = true
-
-    local extmark = vim.api.nvim_buf_get_extmark_by_id(bufnr, ninetyfive_ns, 1, { details = true })
-    if not extmark or #extmark == 0 then
-        vim.b[bufnr].ninetyfive_accepting = false
-        return
-    end
-
-    local details = extmark[3]
-    local extmark_text = extract_extmark_text(details)
-    if extmark_text == "" then
-        extmark_text = collect_completion_text(current_completion.completion)
-    end
-
-    vim.api.nvim_buf_del_extmark(bufnr, ninetyfive_ns, 1)
-
-    local line, col = extmark[1], extmark[2]
-    local applied = apply_completion_text(bufnr, line, col, extmark_text)
-    if not applied then
-        return
-    end
-
-    current_completion.last_accepted = extmark_text
-
-    local count = 0
-    if type(current_completion.completion) == "table" then
-        for i = 1, #current_completion.completion do
-            local item = current_completion.completion[i]
-            if item == vim.NIL then
-                count = count + 1
-                break
-            end
-            count = count + #item
-        end
-    end
-
-    local updated_completion = consumeChars(current_completion.completion, count)
-    current_completion.completion = updated_completion
-
-    if #updated_completion > 0 then
-        table.insert(updated_completion, 1, "\n")
-        vim.b[bufnr].ninetyfive_accepting = true
-        suggestion.show(updated_completion)
-    else
-        vim.b[bufnr].ninetyfive_accepting = false
-        completion_id = ""
-        completion_bufnr = nil
-    end
+    accept_with_selector(select_completion_text)
 end
 
 suggestion.accept_word = function()
