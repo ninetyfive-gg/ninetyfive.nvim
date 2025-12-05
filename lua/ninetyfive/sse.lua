@@ -86,10 +86,6 @@ local function handle_message(parsed)
     end
 
     suggestion.show(current_completion.completion)
-
-    -- if parsed.active ~= nil then
-    --     current_completion.is_active = parsed.active
-    -- end
 end
 
 local function start_request(payload)
