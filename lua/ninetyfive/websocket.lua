@@ -330,7 +330,12 @@ function Websocket.setup_connection(server_uri, user_id, api_key)
             end
         end,
         on_exit = function(_, exit_code, _)
-            log.notify("websocket", vim.log.levels.WARN, true, "websocket job exiting...")
+            -- 143 = SIGTERM (normal shutdown), 0 = normal exit
+            if exit_code ~= 0 and exit_code ~= 143 then
+                log.notify("websocket", vim.log.levels.WARN, true, "websocket job exiting with code: " .. tostring(exit_code))
+            else
+                log.debug("websocket", "websocket job exiting with code: " .. tostring(exit_code))
+            end
         end,
         stdout_buffered = false,
         stderr_buffered = false,
