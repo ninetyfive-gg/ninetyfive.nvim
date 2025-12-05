@@ -76,15 +76,15 @@ local function handle_message(parsed)
     if parsed.content ~= nil and parsed.content ~= vim.NIL then
         table.insert(current_completion.completion, parsed.content)
         current_completion.is_active = true
-        -- print("concat " .. parsed.content)
-    elseif parsed.flush or parsed["end"] then
-        -- print("flush")
+    end
+
+    if parsed.flush == true or parsed["end"] == true then
         table.insert(current_completion.completion, vim.NIL)
         if parsed["end"] == true then
-            -- print("end")
             current_completion.is_active = false
         end
     end
+
     suggestion.show(current_completion.completion)
 
     -- if parsed.active ~= nil then
@@ -171,7 +171,8 @@ local function start_request(payload)
     table.insert(curl_cmd, "@-")
 
     log.debug("sse", "payload bytes: %d (gzip=%s)", #body, tostring(use_gzip))
-    log.debug("sse", "curl command: %s", table.concat(curl_cmd, " "))
+    -- print("[ninetyfive.nvim@sse] curl command: " .. table.concat(curl_cmd, " "))
+    -- print("[ninetyfive.nvim@sse] payload: " .. encoded)
 
     local job_opts = {
         on_stdout = function(_, data, _)
@@ -343,7 +344,7 @@ function Sse.shutdown()
         vim.fn.jobstop(state.current_job)
         state.current_job = nil
     end
-    -- completion_state.clear()
+    suggestion.clear()
     Completion.clear()
 end
 
