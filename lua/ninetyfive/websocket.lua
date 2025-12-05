@@ -325,7 +325,7 @@ function Websocket.setup_connection(server_uri, user_id, api_key)
             if data and #data > 0 then
                 local message = table.concat(data, "\n")
                 if message ~= "" then
-                    log.debug("websocket", "Failed to connect")
+                    log.notify("websocket", vim.log.levels.WARN, true, "Failed to connect" .. message)
                 end
             end
         end,
