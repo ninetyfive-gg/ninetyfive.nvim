@@ -35,7 +35,6 @@ end
 
 -- Clear the global completion
 function Completion.clear()
-    print("whos clearing")
     current_completion = nil
 end
 

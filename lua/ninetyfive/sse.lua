@@ -93,7 +93,6 @@ local function handle_message(parsed)
 end
 
 local function start_request(payload)
-    print("start req")
     local ok, encoded = pcall(vim.json.encode, payload)
     if not ok then
         log.notify(
