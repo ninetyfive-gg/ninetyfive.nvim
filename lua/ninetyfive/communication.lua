@@ -132,10 +132,6 @@ function Communication:_git_metadata(bufnr, callback)
         end
 
         local repo = repo_name_from_path(result.git_root)
-        if not repo then
-            repo = repo_name_from_path(vim.fn.getcwd()) or "unknown"
-        end
-
         result.repo = repo or "unknown"
         callback(result)
     end
@@ -274,6 +270,7 @@ function Communication:_request_websocket_completion(opts)
     local current_prefix = util.get_cursor_prefix(bufnr, cursor)
     local content_prefix = content_to_cursor(bufnr, cursor)
     local pos = #content_prefix
+    local cwd = vim.fn.getcwd()
 
     git.is_ignored(bufname, function(ignored)
         if ignored then
@@ -282,9 +279,7 @@ function Communication:_request_websocket_completion(opts)
         end
 
         git.get_repo_root(function(git_root)
-            local repo = repo_name_from_path(git_root)
-                or repo_name_from_path(vim.fn.getcwd())
-                or "unknown"
+            local repo = repo_name_from_path(git_root) or repo_name_from_path(cwd) or "unknown"
             local request_id = string.format("%d_%04d", os.time(), math.random(0, 9999))
             local payload = {
                 type = "delta-completion-request",
