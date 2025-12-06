@@ -74,9 +74,10 @@ require("lazy").setup({"ninetyfive-gg/ninetyfive.nvim"})
 
 ## Dependencies
 
-There is a websocket adapter shipped in `dist/` for all platforms. If you do not wish to run untrusted binaries,
-you can delete the `dist/` directory entirely. In that case, we will fall back to `libcurl` via LuaJIT FFI when
-available and `curl` CLI if it's not available. For best results:
+There is a [websocket adapter](https://github.com/kevmo314/go-ws-proxy) shipped in `dist/` for all platforms.
+If you do not wish to run untrusted binaries, you can delete the `dist/` directory entirely. In that case,
+we will fall back to `libcurl` via LuaJIT FFI when available and `curl` CLI if it's not available. For best
+results:
 
 - Linux: make sure `libcurl.so` is installed (most distros ship it).
 - macOS: use a modern libcurl (e.g., via Homebrew); the system one is often old.
