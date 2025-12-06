@@ -223,16 +223,23 @@ function Communication:send_file_content(opts)
     end
 
     local bufname = vim.api.nvim_buf_get_name(bufnr)
+    local is_unnamed = not bufname or bufname == ""
+
+    local path = bufname
+    if is_unnamed then
+        path = string.format("Untitled-%d", bufnr)
+    end
+
     git.is_ignored(bufname, function(ignored)
         vim.schedule(function()
-            if ignored then
+            if ignored and not is_unnamed then
                 log.debug("comm", "skipping file-content; git ignored: %s", bufname)
                 return
             end
 
             local payload = {
                 type = "file-content",
-                path = bufname,
+                path = path,
                 text = buffer_content(bufnr),
             }
 
