@@ -206,12 +206,6 @@ return {
 
 _Note_: all NinetyFive cache is stored at `~/.ninetyfive/`
 
-### Pulling latest plugin code using nvim + Lazy
-
-We don't have versioning in the plugin yet, so we need to pull the latest code using `git` and `nvim`'s built-in `git` plugin.
-
-Run `:Lazy update ninetyfive` within neovim to pull the latest commits from main.
-
 ## Commands
 
 | Command               | Description                                  |
