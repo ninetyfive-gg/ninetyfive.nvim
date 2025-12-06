@@ -342,4 +342,18 @@ function Communication:request_completion(opts)
     return false, "not_connected"
 end
 
+-- Resync file-content for all open buffers (used after reconnection)
+function Communication:resync_all_buffers()
+    if not self:is_websocket() then
+        return
+    end
+
+    local buffers = vim.api.nvim_list_bufs()
+    for _, bufnr in ipairs(buffers) do
+        if vim.api.nvim_buf_is_loaded(bufnr) and vim.bo[bufnr].buftype == "" then
+            self:send_file_content({ bufnr = bufnr })
+        end
+    end
+end
+
 return Communication

@@ -10,9 +10,28 @@ local util = require("ninetyfive.util")
 local Websocket = {}
 
 -- Reconnection settings
-local reconnect_attempts = 0
-local max_reconnect_attempts = 300
-local reconnect_delay = 1000
+local reconnect_delay = 1000 -- ms
+local is_intentional_shutdown = false
+
+-- Store connection params for reconnection
+local connection_params = {
+    server_uri = nil,
+    user_id = nil,
+    api_key = nil,
+}
+
+-- Callbacks to run after successful reconnection
+local on_reconnect_callbacks = {}
+
+function Websocket.on_reconnect(callback)
+    table.insert(on_reconnect_callbacks, callback)
+end
+
+local function run_reconnect_callbacks()
+    for _, cb in ipairs(on_reconnect_callbacks) do
+        pcall(cb)
+    end
+end
 
 local home = vim.fn.expand("~")
 local cache_path = home .. "/.ninetyfive/consent.json"
@@ -145,6 +164,7 @@ local function pick_binary()
 end
 
 function Websocket.shutdown()
+    is_intentional_shutdown = true
     if _G.Ninetyfive.websocket_job then
         log.debug("websocket", "Shutting down websocket process")
         vim.fn.jobstop(_G.Ninetyfive.websocket_job)
@@ -156,7 +176,14 @@ end
 function Websocket.setup_connection(server_uri, user_id, api_key)
     log.debug("websocket", "Setting up websocket connection")
 
+    -- Store params for potential reconnection
+    connection_params.server_uri = server_uri
+    connection_params.user_id = user_id
+    connection_params.api_key = api_key
+
+    is_intentional_shutdown = true -- prevent reconnect during setup
     Websocket.shutdown()
+    is_intentional_shutdown = false
 
     local uname = vim.loop.os_uname()
     local sysname = uname and uname.sysname or ""
@@ -330,16 +357,38 @@ function Websocket.setup_connection(server_uri, user_id, api_key)
             end
         end,
         on_exit = function(_, exit_code, _)
+            _G.Ninetyfive.websocket_job = nil
+
             -- 143 = SIGTERM (normal shutdown), 0 = normal exit
             if exit_code ~= 0 and exit_code ~= 143 then
                 log.notify(
                     "websocket",
                     vim.log.levels.WARN,
                     true,
-                    "websocket job exiting with code: " .. tostring(exit_code)
+                    "websocket disconnected (code: " .. tostring(exit_code) .. ")"
                 )
             else
                 log.debug("websocket", "websocket job exiting with code: " .. tostring(exit_code))
+            end
+
+            -- Attempt reconnection if not intentional shutdown
+            if not is_intentional_shutdown and connection_params.server_uri then
+                log.debug("websocket", "Reconnecting in 1s...")
+
+                vim.defer_fn(function()
+                    if is_intentional_shutdown then
+                        return
+                    end
+                    local success = Websocket.setup_connection(
+                        connection_params.server_uri,
+                        connection_params.user_id,
+                        connection_params.api_key
+                    )
+                    if success then
+                        log.notify("websocket", vim.log.levels.INFO, false, "Reconnected")
+                        vim.defer_fn(run_reconnect_callbacks, 500)
+                    end
+                end, reconnect_delay)
             end
         end,
         stdout_buffered = false,
