@@ -1,6 +1,7 @@
 local suggestion = {}
 local ninetyfive_ns = vim.api.nvim_create_namespace("ninetyfive_ghost_ns")
 local Completion = require("ninetyfive.completion")
+local highlighting = require("ninetyfive.highlighting")
 
 local completion_id = ""
 local completion_bufnr = nil
@@ -18,7 +19,6 @@ suggestion.show = function(completion)
                 break
             end
             table.insert(parts, tostring(item))
-            -- print(tostring(item))
         end
     end
 
@@ -29,27 +29,36 @@ suggestion.show = function(completion)
     if bufnr ~= nil and vim.api.nvim_buf_is_valid(bufnr) then
         vim.api.nvim_buf_del_extmark(bufnr, ninetyfive_ns, 1)
     end
-    local virt_lines = {}
-    for _, l in ipairs(vim.fn.split(text, "\n", true)) do
-        table.insert(virt_lines, { { l, "Comment" } })
+
+    local cursor_line = vim.fn.line(".") - 1
+    local cursor_col = vim.fn.col(".") - 1
+
+    -- Get syntax-highlighted lines using full buffer context
+    local virt_lines = highlighting.highlight_completion(text, bufnr)
+    local first_line = table.remove(virt_lines, 1) or { { "", "NinetyFiveGhost" } }
+
+    -- Use inline positioning (Neovim 0.10+) to push text right, fall back to overlay
+    local has_inline = vim.fn.has("nvim-0.10") == 1
+    local extmark_opts = {
+        id = 1,
+        virt_text = first_line,
+        virt_lines = virt_lines,
+        hl_mode = "combine",
+        ephemeral = false,
+    }
+
+    if has_inline then
+        extmark_opts.virt_text_pos = "inline"
+    else
+        extmark_opts.virt_text_win_col = vim.fn.virtcol(".") - 1
     end
-    local first_line = table.remove(virt_lines, 1) or { { "", "Comment" } }
 
     completion_id = vim.api.nvim_buf_set_extmark(
         bufnr,
         ninetyfive_ns,
-        vim.fn.line(".") - 1,
-        vim.fn.col(".") - 1,
-        {
-            id = 1,
-            -- right_gravity = true,
-            virt_text = first_line,
-            -- virt_text_pos = vim.fn.has("nvim-0.10") == 1 and "inline" or "overlay",
-            virt_lines = virt_lines,
-            virt_text_win_col = vim.fn.virtcol(".") - 1,
-            hl_mode = "combine",
-            ephemeral = false,
-        }
+        cursor_line,
+        cursor_col,
+        extmark_opts
     )
     completion_bufnr = bufnr
 end

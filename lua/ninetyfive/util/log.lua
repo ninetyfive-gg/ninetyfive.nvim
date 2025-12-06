@@ -61,11 +61,13 @@ function log.notify(scope, level, verbose, str, ...)
         formatted_message = str
     end
 
-    vim.notify(
-        string.format("[ninetyfive.nvim@%s] %s", scope, formatted_message),
-        level,
-        { title = "ninetyfive.nvim" }
-    )
+    vim.schedule(function()
+        vim.notify(
+            string.format("[ninetyfive.nvim@%s] %s", scope, formatted_message),
+            level,
+            { title = "ninetyfive.nvim" }
+        )
+    end)
 end
 
 --- analyzes the user provided `setup` parameters and sends a message if they use a deprecated option, then gives the new option to use.
