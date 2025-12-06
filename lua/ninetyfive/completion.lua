@@ -35,6 +35,7 @@ end
 
 -- Clear the global completion
 function Completion.clear()
+    print("wtf?")
     current_completion = nil
 end
 

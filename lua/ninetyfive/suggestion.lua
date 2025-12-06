@@ -11,6 +11,7 @@ local lsp_util = vim.lsp.util
 suggestion.show = function(completion)
     -- build text up to the next flush
     local parts = {}
+    -- print("show")
     if type(completion) == "table" then
         for i = 1, #completion do
             local item = completion[i]
@@ -68,32 +69,6 @@ function suggestion.get_current_extmark_position(bufnr)
     end
 
     return { row = mark[1], col = mark[2] }
-end
-
-local function consumeChars(array, count)
-    local remaining = count
-
-    while remaining > 0 and #array > 0 do
-        local chunk = table.remove(array, 1)
-
-        if chunk == vim.NIL then
-            -- Continue to next iteration, nil is already removed
-        elseif #chunk <= remaining then
-            -- Consume the entire chunk
-            remaining = remaining - #chunk
-        else
-            -- Consume part of the chunk and put the rest back
-            table.insert(array, 1, string.sub(chunk, remaining + 1))
-            remaining = 0
-        end
-    end
-
-    -- Remove any leading nils to expose the next chunk
-    while #array > 0 and array[1] == nil do
-        table.remove(array, 1)
-    end
-
-    return array
 end
 
 local function collect_completion_text(completion)
@@ -240,31 +215,33 @@ local function accept_with_selector(selector)
     vim.api.nvim_buf_del_extmark(bufnr, ninetyfive_ns, 1)
 
     local line, col = extmark[1], extmark[2]
+    vim.b[bufnr].ninetyfive_accepting = true
     local applied = apply_completion_text(bufnr, line, col, accepted_text)
+    -- vim.b[bufnr].ninetyfive_accepting = false
     if not applied then
         return
     end
 
     current_completion.last_accepted = accepted_text
 
-    local accepted_length = #accepted_text
-    local consumed_entire_completion = accepted_length >= #completion_text
-    local consume_count = consumed_entire_completion and (accepted_length + 1) or accepted_length
+    -- local accepted_length = #accepted_text
+    -- local consumed_entire_completion = accepted_length >= #completion_text
+    -- local consume_count = consumed_entire_completion and (accepted_length + 1) or accepted_length
 
-    local updated_completion = consumeChars(current_completion.completion, consume_count)
-    current_completion.completion = updated_completion
+    -- local updated_completion = consumeChars(current_completion.completion, consume_count)
+    -- current_completion.completion = updated_completion
 
-    if #updated_completion > 0 then
-        if consumed_entire_completion then
-            table.insert(updated_completion, 1, "\n")
-        end
-        vim.b[bufnr].ninetyfive_accepting = true
-        suggestion.show(updated_completion)
-    else
-        vim.b[bufnr].ninetyfive_accepting = false
-        completion_id = ""
-        completion_bufnr = nil
-    end
+    -- if #updated_completion > 0 then
+    --     if consumed_entire_completion then
+    --         table.insert(updated_completion, 1, "\n")
+    --     end
+    --     vim.b[bufnr].ninetyfive_accepting = true
+    --     suggestion.show(updated_completion)
+    -- else
+    --     vim.b[bufnr].ninetyfive_accepting = false
+    --     completion_id = ""
+    --     completion_bufnr = nil
+    -- end
 end
 
 local function select_next_word(text)

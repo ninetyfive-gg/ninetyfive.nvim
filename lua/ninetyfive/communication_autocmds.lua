@@ -9,6 +9,25 @@ local util = require("ninetyfive.util")
 local CommunicationAutocmds = {}
 CommunicationAutocmds.__index = CommunicationAutocmds
 
+-- TODO lmao remove this crap
+local function myprint(msg)
+    if true then
+        print(msg)
+    end
+end
+
+local function print_table(completion)
+    for i = 1, #completion do
+        local item = completion[i]
+        if item == vim.NIL then -- Stop at first nil
+            myprint("nil")
+            break
+        end
+        myprint(tostring(item))
+    end
+    return
+end
+
 local function should_ignore_buffer(bufnr)
     local filetype = vim.bo[bufnr].filetype
     if vim.tbl_contains(ignored_filetypes, filetype) then
@@ -32,6 +51,32 @@ local function completion_as_text(chunks)
         parts[#parts + 1] = tostring(item)
     end
     return table.concat(parts)
+end
+
+local function consume_chars(array, count)
+    local remaining = count
+
+    while remaining > 0 and #array > 0 do
+        local chunk = table.remove(array, 1)
+
+        if chunk == vim.NIL then
+            -- Continue to next iteration, nil is already removed
+        elseif #chunk <= remaining then
+            -- Consume the entire chunk
+            remaining = remaining - #chunk
+        else
+            -- Consume part of the chunk and put the rest back
+            table.insert(array, 1, string.sub(chunk, remaining + 1))
+            remaining = 0
+        end
+    end
+
+    -- Remove any leading nils to expose the next chunk
+    while #array > 0 and array[1] == nil do
+        table.remove(array, 1)
+    end
+
+    return array
 end
 
 local function trim_completion_chunks(chunks, remove_count)
@@ -62,42 +107,6 @@ local function trim_completion_chunks(chunks, remove_count)
     return trimmed
 end
 
-local function handle_existing_completion(current_prefix)
-    local current_completion = Completion.get()
-    if
-        not current_completion
-        or not current_completion.prefix
-        or not current_completion.completion
-    then
-        return false
-    end
-
-    local inserted_text = current_prefix:sub(#current_completion.prefix + 1)
-    if inserted_text == "" then
-        return false
-    end
-
-    local completion_text = completion_as_text(current_completion.completion)
-
-    if completion_text:sub(1, #inserted_text) == inserted_text then
-        local new_completion = trim_completion_chunks(current_completion.completion, #inserted_text)
-        current_completion.completion = new_completion
-        current_completion.prefix = current_prefix
-        suggestion.clear()
-        suggestion.show(new_completion)
-        return true
-    end
-
-    -- What was previously accepted
-    if inserted_text == current_completion.last_accepted then
-        current_completion.prefix = current_completion.prefix .. current_completion.last_accepted
-        current_completion.last_accepted = ""
-        return true
-    end
-
-    return false
-end
-
 function CommunicationAutocmds.new(opts)
     opts = opts or {}
     local communication
@@ -123,6 +132,127 @@ function CommunicationAutocmds:clear()
     end
 end
 
+function CommunicationAutocmds:reconcile(args, event)
+    local bufnr = args.buf
+    if should_ignore_buffer(bufnr) then
+        return
+    end
+
+    local completion = Completion.get()
+    local cursor = vim.api.nvim_win_get_cursor(0)
+    local current_prefix = util.get_cursor_prefix(bufnr, cursor)
+    local is_accepting = vim.b[bufnr].ninetyfive_accepting == true
+    local event_is_move = event == "move"
+    local event_is_edit = event == "edit"
+
+    local function completion_ready()
+        return completion and completion.prefix and completion.completion
+    end
+
+    local should_request_completion = not completion_ready()
+
+    local function clear_completion_state()
+        suggestion.clear()
+        Completion.clear()
+        completion = nil
+        should_request_completion = true
+    end
+
+    local function consume_current_completion(opts)
+        if not completion or not completion.prefix or not completion.completion then
+            return false
+        end
+
+        if #current_prefix < #completion.prefix then
+            clear_completion_state()
+            return false
+        end
+
+        local inserted_text = current_prefix:sub(#completion.prefix + 1)
+        if inserted_text == "" then
+            return false
+        end
+
+        local completion_text = completion_as_text(completion.completion)
+        if completion_text:sub(1, #inserted_text) ~= inserted_text then
+            if opts and opts.clear_on_mismatch then
+                clear_completion_state()
+            end
+            return false
+        end
+
+        local accepted_length = #inserted_text
+        local consumed_entire_completion = accepted_length >= #completion_text
+        local new_completion
+
+        if opts and opts.strategy == "trim" then
+            new_completion = trim_completion_chunks(completion.completion, accepted_length)
+        else
+            local consume_count = accepted_length
+            if opts and opts.consume_extra_when_complete and consumed_entire_completion then
+                consume_count = consume_count + 1
+            end
+
+            new_completion = consume_chars(completion.completion, consume_count)
+            if opts and opts.append_newline_when_complete and #new_completion > 0 and consumed_entire_completion then
+                table.insert(new_completion, 1, "\n")
+            end
+        end
+
+        completion.completion = new_completion
+        completion.prefix = current_prefix
+        completion.last_accepted = ""
+        suggestion.clear()
+        local has_remaining = #new_completion > 0
+        if has_remaining then
+            suggestion.show(new_completion)
+        else
+            clear_completion_state()
+        end
+
+        return true, has_remaining
+    end
+
+    if is_accepting and event_is_move then
+        should_request_completion = not completion_ready() or #completion.completion == 0
+        vim.b[bufnr].ninetyfive_accepting = false
+    elseif is_accepting and event_is_edit then
+        local consumed, has_remaining = consume_current_completion({ strategy = "trim", clear_on_mismatch = true })
+        if consumed then
+            should_request_completion = not has_remaining
+        end
+    elseif (event_is_edit or event_is_move) and completion_ready() then
+        local consumed, has_remaining = consume_current_completion({
+            consume_extra_when_complete = true,
+            append_newline_when_complete = true,
+            clear_on_mismatch = true,
+        })
+        if consumed then
+            should_request_completion = not has_remaining
+        end
+    end
+
+    if event_is_move then
+        vim.b[bufnr].ninetyfive_accepting = false
+    end
+
+    if should_request_completion then
+        myprint("is going to request")
+        suggestion.clear()
+        Completion.clear()
+        vim.schedule(function()
+            local ok, err = self.communication:request_completion({
+                bufnr = bufnr,
+                buf = bufnr,
+                cursor = cursor,
+            })
+            if not ok and err then
+                log.debug("autocmds", "request_completion failed: %s", tostring(err))
+            end
+        end)
+    end
+end
+
 function CommunicationAutocmds:setup_autocommands()
     self:clear()
 
@@ -133,13 +263,7 @@ function CommunicationAutocmds:setup_autocommands()
         pattern = "*",
         group = group,
         callback = function(args)
-            if vim.b[args.buf].ninetyfive_accepting then
-                return
-            end
-
-            -- TODO I think this may need more guards?
-            -- Completion.clear()
-            -- suggestion.clear()
+            self:reconcile(args, "move")
         end,
     })
 
@@ -147,35 +271,7 @@ function CommunicationAutocmds:setup_autocommands()
         pattern = "*",
         group = group,
         callback = function(args)
-            local bufnr = args.buf
-            if should_ignore_buffer(bufnr) then
-                return
-            end
-
-            -- if vim.b[bufnr].ninetyfive_accepting then
-            --     return
-            -- end
-
-            local cursor = vim.api.nvim_win_get_cursor(0)
-            local current_prefix = util.get_cursor_prefix(bufnr, cursor)
-
-            if handle_existing_completion(current_prefix) then
-                return
-            end
-
-            suggestion.clear()
-            Completion.clear()
-
-            vim.schedule(function()
-                local ok, err = self.communication:request_completion({
-                    bufnr = bufnr,
-                    buf = bufnr,
-                    cursor = cursor,
-                })
-                if not ok and err then
-                    log.debug("autocmds", "request_completion failed: %s", tostring(err))
-                end
-            end)
+            self:reconcile(args, "edit")
         end,
     })
 
@@ -187,6 +283,9 @@ function CommunicationAutocmds:setup_autocommands()
             if should_ignore_buffer(bufnr) then
                 return
             end
+
+            myprint("inittt")
+            vim.b[bufnr].ninetyfive_accepting = false
 
             if self.communication:is_websocket() then
                 self.communication:set_workspace({ bufnr = bufnr })
