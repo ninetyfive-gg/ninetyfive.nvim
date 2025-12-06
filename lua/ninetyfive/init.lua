@@ -6,9 +6,15 @@ local Communication = require("ninetyfive.communication")
 local CommunicationAutocmds = require("ninetyfive.communication_autocmds")
 local Completion = require("ninetyfive.completion")
 local suggestion = require("ninetyfive.suggestion")
+local websocket = require("ninetyfive.websocket")
 
 local communication = Communication.new()
 local autocmds = CommunicationAutocmds.new({ communication = communication })
+
+-- Register callback to resync buffers after websocket reconnection
+websocket.on_reconnect(function()
+    communication:resync_all_buffers()
+end)
 
 math.randomseed(os.time())
 
