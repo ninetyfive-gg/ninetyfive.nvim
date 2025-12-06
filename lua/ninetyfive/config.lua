@@ -1,5 +1,5 @@
 local log = require("ninetyfive.util.log")
-local transport = require("ninetyfive.transport")
+local Completion = require("ninetyfive.completion")
 
 local Ninetyfive = {}
 
@@ -20,7 +20,10 @@ Ninetyfive.options = {
         enabled = true,
         -- Sets a global mapping to accept a suggestion
         accept = "<Tab>",
-        accept_edit = "<C-g>",
+        -- Mapping to accept the next word
+        accept_word = "<C-h>",
+        -- Mapping to accep the next line
+        accept_line = "<C-j>",
         -- Sets a global mapping to reject a suggestion
         reject = "<C-w>",
     },
@@ -65,20 +68,20 @@ local function register_mappings(options, mappings)
     end
 
     for name, command in pairs(mappings) do
-        if not options[name] then
-            return
+        local key = options[name]
+        if not key then
+            goto continue
         end
 
-        assert(type(options[name]) == "string", string.format("`%s` must be a string", name))
+        assert(type(key) == "string", string.format("`%s` must be a string", name))
 
-        local key = options[name]
         local opts = { noremap = true, silent = true }
 
         -- conditional tab behavior, ensure we don't completely hijack the tab key.
         if name == "accept" then
             opts.expr = true
             vim.keymap.set("i", key, function()
-                if transport.has_active and transport.has_active() then
+                if Completion.has_active_completion() then
                     return "<Cmd>NinetyFiveAccept<CR>"
                 else
                     return vim.fn.pumvisible() == 1 and "<C-n>" or "<Tab>"
@@ -87,6 +90,8 @@ local function register_mappings(options, mappings)
         else
             vim.keymap.set({ "n", "i" }, key, command, opts)
         end
+
+        ::continue::
     end
 end
 
@@ -102,7 +107,8 @@ function Ninetyfive.setup(options)
 
     register_mappings(Ninetyfive.options.mappings, {
         accept = "<Cmd>NinetyFiveAccept<CR>",
-        accept_edit = "<Cmd>NinetyFiveAcceptEdit<CR>",
+        accept_word = "<Cmd>NinetyFiveAcceptWord<CR>",
+        accept_line = "<Cmd>NinetyFiveAcceptLine<CR>",
         reject = "<Cmd>NinetyFiveReject<CR>",
     })
 

@@ -66,8 +66,8 @@ T["start_request always uses stdin for curl data"] = function()
 
         -- Now trigger a completion request to capture the curl command
         -- First set up the completion state module
-        local completion_state = require("ninetyfive.completion_state")
-        completion_state.set_current_completion(nil)
+        local Completion = require("ninetyfive.completion")
+        Completion.clear()
 
         -- Create a buffer for the request
         vim.cmd("new")
@@ -154,8 +154,8 @@ T["start_request sends body via chansend"] = function()
         local sse = require("ninetyfive.sse")
         sse.setup({ server_uri = "http://test.example.com", user_id = "test" })
 
-        local completion_state = require("ninetyfive.completion_state")
-        completion_state.set_current_completion(nil)
+        local Completion = require("ninetyfive.completion")
+        Completion.clear()
 
         vim.cmd("new")
         local bufnr = vim.api.nvim_get_current_buf()

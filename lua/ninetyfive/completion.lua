@@ -1,71 +1,46 @@
-local log = require("ninetyfive.util.log")
-
 local Completion = {}
 Completion.__index = Completion
 
--- Create a new Completion instance
+-- Global single completion instance
+local current_completion = nil
+
+-- Create or replace the global completion
 function Completion.new(request_id)
     local self = setmetatable({}, Completion)
     self.request_id = request_id
     self.completion = {}
-    self.consumed = 0
     self.is_closed = false
-    self.edits = {}
-    self.edit_description = ""
-    self.edit_index = 1
-
     self.is_active = false
+    self.buffer = nil
+    self.active_text = nil
+    self.prefix = ""
+    self.last_accepted = ""
+
+    -- Set as the global completion
+    current_completion = self
+
     return self
 end
 
-function Completion:consume(n)
-    local total = self:length()
-    if n > total then
-        log.debug("edit_state", "Illegal state: trying to mark flush beyond completion length")
-        return
-    end
-    self.consumed = n
+-- Get the current global completion
+function Completion.get()
+    return current_completion
 end
 
-function Completion:get_text()
-    local parts = {}
-
-    if type(self.completion) == "table" then
-        for _, item in ipairs(self.completion) do
-            if type(item) == "table" then
-                if item.v and item.v ~= vim.NIL then
-                    table.insert(parts, tostring(item.v))
-                end
-            elseif type(item) == "string" then
-                table.insert(parts, item)
-            end
-        end
-    elseif type(self.completion) == "string" then
-        table.insert(parts, self.completion)
-    end
-
-    return table.concat(parts)
+function Completion.has_active_completion()
+    return current_completion
+        and current_completion.completion
+        and #current_completion.completion > 0
 end
 
-function Completion:length()
-    local text = self:get_text()
-    return #text
+-- Clear the global completion
+function Completion.clear()
+    current_completion = nil
 end
 
-function Completion:close()
-    self.is_closed = true
-    local text = self:get_text()
-
-    if vim.trim(text) == "" then
-        -- Handle a single newline as an edge case, we ignore the completion and directly go to edits
-        self.consumed = #text
-    end
-end
-
-function Completion:next_edit()
-    if self.is_closed and self.consumed >= self:length() and self.edit_index <= #self.edits then
-        return self.edits[self.edit_index]
-    end
+-- Check if a completion exists
+function Completion.exists()
+    return current_completion ~= nil
 end
 
 return Completion
