@@ -10,6 +10,10 @@ local log = require("ninetyfive.util.log")
 local lsp_util = vim.lsp.util
 
 suggestion.show = function(completion)
+    if vim.fn.mode() ~= 'i' then
+        -- Do not show a suggestion if not in insert mode!
+        return
+    end
     -- build text up to the next flush
     local parts = {}
     -- print("show")
