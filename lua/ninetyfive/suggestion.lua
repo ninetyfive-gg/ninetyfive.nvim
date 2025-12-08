@@ -10,6 +10,10 @@ local log = require("ninetyfive.util.log")
 local lsp_util = vim.lsp.util
 
 suggestion.show = function(completion)
+    if vim.fn.mode() ~= 'i' then
+        -- Do not show a suggestion if not in insert mode!
+        return
+    end
     -- build text up to the next flush
     local parts = {}
     if type(completion) == "table" then
@@ -264,6 +268,7 @@ local function accept_with_selector(selector)
     current_completion.completion = updated_completion
 
     if #updated_completion > 0 then
+        -- TODO maybe this is the bug?
         if consumed_entire_completion then
             table.insert(updated_completion, 1, "\n")
         end
