@@ -105,6 +105,10 @@ require("ninetyfive").setup({
     enabled = true,
     -- Sets a global mapping to accept a suggestion
     accept = "<Tab>",
+    -- Sets a global mapping to accept the next word
+    accept_word = "<C-h>",
+    -- Sets a global mapping to accept the next line
+    accept_line = "<C-j>",
     -- Sets a global mapping to reject a suggestion
     reject = "<C-w>",
   },
@@ -136,6 +140,8 @@ use {
       mappings = {
         enabled = true,
         accept = "<Tab>",
+        accept_word = "<C-h>",
+        accept_line = "<C-j>",
         reject = "<C-w>",
       },
       indexing = {
@@ -161,6 +167,8 @@ require("ninetyfive").setup({
   mappings = {
     enabled = true,
     accept = "<Tab>",
+    accept_word = "<C-h>",
+    accept_line = "<C-j>",
     reject = "<C-w>",
   },
   indexing = {
@@ -187,6 +195,8 @@ return {
       mappings = {
         enabled = true,
         accept = "<Tab>",
+        accept_word = "<C-h>",
+        accept_line = "<C-j>",
         reject = "<C-w>",
       },
       indexing = {
