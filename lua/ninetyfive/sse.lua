@@ -167,8 +167,6 @@ local function start_request(payload)
     table.insert(curl_cmd, "@-")
 
     log.debug("sse", "payload bytes: %d (gzip=%s)", #body, tostring(use_gzip))
-    -- print("[ninetyfive.nvim@sse] curl command: " .. table.concat(curl_cmd, " "))
-    -- print("[ninetyfive.nvim@sse] payload: " .. encoded)
 
     local job_opts = {
         on_stdout = function(_, data, _)
@@ -269,7 +267,6 @@ function Sse.request_completion(args)
 
     local current_completion = Completion.get()
     if current_completion ~= nil then
-        print("not requesting")
         return
     end
 

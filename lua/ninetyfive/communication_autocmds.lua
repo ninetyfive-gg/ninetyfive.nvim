@@ -9,21 +9,12 @@ local util = require("ninetyfive.util")
 local CommunicationAutocmds = {}
 CommunicationAutocmds.__index = CommunicationAutocmds
 
--- TODO lmao remove this crap
-local function myprint(msg)
-    if true then
-        print(msg)
-    end
-end
-
 local function print_table(completion)
     for i = 1, #completion do
         local item = completion[i]
         if item == vim.NIL then -- Stop at first nil
-            myprint("nil")
             break
         end
-        myprint(tostring(item))
     end
     return
 end
@@ -241,7 +232,6 @@ function CommunicationAutocmds:reconcile(args, event)
     end
 
     if should_request_completion then
-        myprint("is going to request")
         suggestion.clear()
         Completion.clear()
         vim.schedule(function()
@@ -288,7 +278,6 @@ function CommunicationAutocmds:setup_autocommands()
                 return
             end
 
-            myprint("inittt")
             vim.b[bufnr].ninetyfive_accepting = false
 
             if self.communication:is_websocket() then

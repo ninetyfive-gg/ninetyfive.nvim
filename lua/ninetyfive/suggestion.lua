@@ -179,6 +179,36 @@ suggestion.show = function(completion)
     if has_inline then
         extmark_opts.virt_text_pos = "inline"
     else
+        -- Pre-0.10: render full completion as overlay, with matched portions in normal style
+        -- Build match_positions table and find trailing delete text
+        local match_positions = {}
+        local comp_idx = 1
+        local delete_text = ""
+        for _, edit in ipairs(diff_result.edits) do
+            if edit.type == "ghost" then
+                comp_idx = comp_idx + #edit.text
+            elseif edit.type == "match" then
+                for _ = 1, #edit.text do
+                    match_positions[comp_idx] = true
+                    comp_idx = comp_idx + 1
+                end
+            elseif edit.type == "delete" and is_complete then
+                delete_text = delete_text .. edit.text
+            end
+        end
+
+        first_line_virt_text = highlighting.highlight_completion_with_matches(first_line_text, bufnr, match_positions)
+
+        -- Append delete text with strikethrough to cover remaining buffer
+        if delete_text ~= "" then
+            setup_delete_highlight()
+            table.insert(first_line_virt_text, { delete_text, "NinetyFiveDelete" })
+        end
+
+        -- Clear buffer delete highlights since we render it in the overlay
+        vim.api.nvim_buf_clear_namespace(bufnr, ninetyfive_delete_ns, 0, -1)
+
+        extmark_opts.virt_text = first_line_virt_text
         extmark_opts.virt_text_win_col = vim.fn.virtcol(".") - 1
     end
 
@@ -260,15 +290,9 @@ local function apply_completion_text(bufnr, line, col, text)
     local end_col = col
 
     if not has_newline then
-        local first_line = text
-        local line_break = string.find(text, "\n", 1, true)
-        if line_break then
-            first_line = string.sub(text, 1, line_break - 1)
-        end
-
+        -- Replace from cursor to end of line
         local line_text = vim.api.nvim_buf_get_lines(bufnr, line, line + 1, false)[1] or ""
-        local virt_width = vim.fn.strdisplaywidth(first_line)
-        end_col = math.min(#line_text, col + virt_width)
+        end_col = #line_text
     end
 
     local offset_encoding = "utf-8"
