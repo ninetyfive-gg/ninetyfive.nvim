@@ -272,63 +272,68 @@ function Sse.request_completion(args)
 
     local bufnr = args.buf
     local bufname = vim.api.nvim_buf_get_name(bufnr)
+    local is_unnamed = not bufname or bufname == ""
 
-    if git.is_ignored(bufname) then
-        log.debug("sse", "Skipping completion - file is git ignored")
-        return
-    end
-
-    local cursor = vim.api.nvim_win_get_cursor(0)
-    local line = cursor[1] - 1
-    local col = cursor[2]
-
-    local lines = vim.api.nvim_buf_get_lines(bufnr, 0, line + 1, false)
-    if #lines > 0 then
-        lines[#lines] = string.sub(lines[#lines], 1, col)
-    end
-
-    local content_to_cursor = table.concat(lines, "\n")
-    local pos = #content_to_cursor
-
-    local git_root = git.get_repo_root()
-    local repo = "unknown"
-    if git_root then
-        local repo_match = string.match(git_root, "/([^/]+)$")
-        if repo_match then
-            repo = repo_match
+    git.is_ignored(bufname, function(ignored)
+        if ignored and not is_unnamed then
+            log.debug("sse", "skipping file-content; git ignored: %s", bufname)
+            return
         end
-    else
-        local cwd = vim.fn.getcwd()
-        local repo_match = string.match(cwd, "/([^/]+)$")
-        if repo_match then
-            repo = repo_match
-        end
-    end
 
-    local filepath = build_relative_path(bufname, git_root)
-    local content = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
+        vim.schedule(function()
+            local cursor = vim.api.nvim_win_get_cursor(0)
+            local line = cursor[1] - 1
+            local col = cursor[2]
 
-    local request_id = tostring(os.time()) .. "_" .. tostring(math.random(1000, 9999))
+            local lines = vim.api.nvim_buf_get_lines(bufnr, 0, line + 1, false)
+            if #lines > 0 then
+                lines[#lines] = string.sub(lines[#lines], 1, col)
+            end
 
-    local new_completion = Completion.new(request_id)
-    local curr_text = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
-    local current_prefix = util.get_cursor_prefix(bufnr, cursor) -- maybe just pass it? and maybe add them to the "constructor" lol
-    new_completion.buffer = bufnr
-    new_completion.active_text = curr_text
-    new_completion.prefix = current_prefix
+            local content_to_cursor = table.concat(lines, "\n")
+            local pos = #content_to_cursor
 
-    local payload = {
-        user_id = state.user_id,
-        id = request_id,
-        repo = repo,
-        filepath = filepath,
-        content = content,
-        cursor = pos,
-    }
+            local git_root = git.get_repo_root()
+            local repo = "unknown"
+            if git_root then
+                local repo_match = string.match(git_root, "/([^/]+)$")
+                if repo_match then
+                    repo = repo_match
+                end
+            else
+                local cwd = vim.fn.getcwd()
+                local repo_match = string.match(cwd, "/([^/]+)$")
+                if repo_match then
+                    repo = repo_match
+                end
+            end
 
-    if not start_request(payload) then
-        Completion.clear()
-    end
+            local filepath = build_relative_path(bufname, git_root)
+            local content = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
+
+            local request_id = tostring(os.time()) .. "_" .. tostring(math.random(1000, 9999))
+
+            local new_completion = Completion.new(request_id)
+            local curr_text = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
+            local current_prefix = util.get_cursor_prefix(bufnr, cursor) -- maybe just pass it? and maybe add them to the "constructor" lol
+            new_completion.buffer = bufnr
+            new_completion.active_text = curr_text
+            new_completion.prefix = current_prefix
+
+            local payload = {
+                user_id = state.user_id,
+                id = request_id,
+                repo = repo,
+                filepath = filepath,
+                content = content,
+                cursor = pos,
+            }
+
+            if not start_request(payload) then
+                Completion.clear()
+            end
+        end)
+    end)
 end
 
 function Sse.shutdown()
