@@ -9,16 +9,6 @@ local util = require("ninetyfive.util")
 local CommunicationAutocmds = {}
 CommunicationAutocmds.__index = CommunicationAutocmds
 
-local function print_table(completion)
-    for i = 1, #completion do
-        local item = completion[i]
-        if item == vim.NIL then -- Stop at first nil
-            break
-        end
-    end
-    return
-end
-
 local function should_ignore_buffer(bufnr)
     local filetype = vim.bo[bufnr].filetype
     if vim.tbl_contains(ignored_filetypes, filetype) then
@@ -231,7 +221,7 @@ function CommunicationAutocmds:reconcile(args, event)
         vim.b[bufnr].ninetyfive_accepting = false
     end
 
-    if should_request_completion then
+    if should_request_completion and event_is_move then
         suggestion.clear()
         Completion.clear()
         vim.schedule(function()
@@ -281,8 +271,10 @@ function CommunicationAutocmds:setup_autocommands()
             vim.b[bufnr].ninetyfive_accepting = false
 
             if self.communication:is_websocket() then
-                self.communication:set_workspace({ bufnr = bufnr })
-                self.communication:send_file_content({ bufnr = bufnr })
+                vim.schedule(function()
+                    self.communication:set_workspace({ bufnr = bufnr })
+                    self.communication:send_file_content({ bufnr = bufnr })
+                end)
             end
         end,
     })

@@ -1,14 +1,5 @@
 local M = {}
 
-local log = require("ninetyfive.util.log")
-
--- Safe logging that doesn't fail if Ninetyfive isn't initialized
-local function debug_log(...)
-    if _G.Ninetyfive and _G.Ninetyfive.config then
-        log.debug(...)
-    end
-end
-
 ---@class DiffEdit
 ---@field type "ghost" | "delete" | "match"
 ---@field offset number Position in buffer (0-indexed from cursor)
@@ -27,11 +18,6 @@ end
 ---@param is_complete boolean If true, mark leftover buffer for deletion
 ---@return DiffResult
 function M.calculate_diff(completion, buffer, is_complete)
-    debug_log("diff", "calculate_diff called:")
-    debug_log("diff", "  completion: %q (len=%d)", completion, #completion)
-    debug_log("diff", "  buffer: %q (len=%d)", buffer, #buffer)
-    debug_log("diff", "  is_complete: %s", tostring(is_complete))
-
     local edits = {}
 
     -- Empty buffer: entire completion is ghost text
@@ -39,7 +25,6 @@ function M.calculate_diff(completion, buffer, is_complete)
         if completion ~= "" then
             table.insert(edits, { type = "ghost", offset = 0, text = completion })
         end
-        debug_log("diff", "  -> empty buffer, returning ghost: %q", completion)
         return { edits = edits }
     end
 
@@ -48,7 +33,6 @@ function M.calculate_diff(completion, buffer, is_complete)
         if is_complete then
             table.insert(edits, { type = "delete", offset = 0, text = buffer })
         end
-        debug_log("diff", "  -> empty completion, returning delete: %q", buffer)
         return { edits = edits }
     end
 
@@ -104,12 +88,6 @@ function M.calculate_diff(completion, buffer, is_complete)
             })
         end
         -- During streaming, leftover buffer is left as-is (no edit)
-    end
-
-    -- Log the result
-    debug_log("diff", "  -> result: %d edits", #edits)
-    for idx, edit in ipairs(edits) do
-        debug_log("diff", "    [%d] type=%s, offset=%d, text=%q", idx, edit.type, edit.offset, edit.text)
     end
 
     return { edits = edits }

@@ -37,38 +37,20 @@ local home = vim.fn.expand("~")
 local cache_path = home .. "/.ninetyfive/consent.json"
 vim.fn.mkdir(home .. "/.ninetyfive", "p")
 
--- Function to send a message to the websocket
+-- Function to send a message to the websocket (synchronous - caller must ensure safe context)
 function Websocket.send_message(message)
-    -- Check if the global table exists
     if not _G.Ninetyfive then
-        log.debug("websocket", "Global Ninetyfive table not initialized")
         return false
     end
 
-    -- Check if websocket job exists and is valid
     if not (_G.Ninetyfive.websocket_job and _G.Ninetyfive.websocket_job > 0) then
-        log.debug("websocket", "Websocket connection not established")
         return false
     end
 
-    local ok, result = pcall(function()
-        return vim.fn.chansend(_G.Ninetyfive.websocket_job, message .. "\n")
-    end)
+    log.debug("websocket", "-> sending: %s", message)
 
-    -- Handle any errors that occurred
-    if not ok then
-        -- log.debug("websocket", "Error sending message: " .. tostring(result))
-        return false
-    end
-
-    -- Check if the send was successful
-    if result == 0 then
-        -- log.debug("websocket", "Failed to send message to websocket")
-        return false
-    end
-
-    -- log.debug("websocket", "Sent message to websocket")
-    return true
+    local result = vim.fn.chansend(_G.Ninetyfive.websocket_job, message .. "\n")
+    return result > 0
 end
 
 local function get_indexing_consent(callback)
@@ -302,9 +284,9 @@ function Websocket.setup_connection(server_uri, user_id, api_key)
                                 commitHash = parsed.commitHash,
                                 commit = commit,
                             })
-                            if not Websocket.send_message(send_commit) then
-                                log.debug("websocket", "Failed to send commit")
-                            end
+                            vim.schedule(function()
+                                Websocket.send_message(send_commit)
+                            end)
                         end
                     elseif msg_type == "get-blob" then
                         local blob = git.get_blob(parsed.commitHash, parsed.path)
@@ -317,10 +299,9 @@ function Websocket.setup_connection(server_uri, user_id, api_key)
                                 blobBytes = blob.blob,
                                 diffBytes = blob.diff,
                             })
-                            log.debug("messages", "-> [blob]", send_blob)
-                            if not Websocket.send_message(send_blob) then
-                                log.debug("websocket", "Failed to send blob")
-                            end
+                            vim.schedule(function()
+                                Websocket.send_message(send_blob)
+                            end)
                         end
                     else
                         local c = Completion.get()

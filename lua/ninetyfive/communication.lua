@@ -4,9 +4,13 @@ local sse = require("ninetyfive.sse")
 local Completion = require("ninetyfive.completion")
 local git = require("ninetyfive.git")
 local util = require("ninetyfive.util")
+local delta = require("ninetyfive.delta")
 
 local Communication = {}
 Communication.__index = Communication
+
+-- Track last known file content per buffer for delta calculation
+local buffer_texts = {}
 
 local function repo_name_from_path(path)
     if not path or path == "" then
@@ -22,6 +26,18 @@ local function buffer_content(bufnr)
         return ""
     end
     return table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
+end
+
+-- Make path relative to cwd if it's a prefix
+local function relative_path(path)
+    if not path or path == "" then
+        return path
+    end
+    local cwd = vim.fn.getcwd()
+    if path:sub(1, #cwd) == cwd then
+        return path:sub(#cwd + 2) -- +2 to skip trailing slash
+    end
+    return path
 end
 
 local function content_to_cursor(bufnr, cursor)
@@ -154,9 +170,11 @@ function Communication:_send_workspace(payload)
         return
     end
 
-    if not websocket.send_message(message) then
-        log.debug("comm", "failed to send set-workspace message")
-    end
+    vim.schedule(function()
+        if not websocket.send_message(message) then
+            log.debug("comm", "failed to send set-workspace message")
+        end
+    end)
 end
 
 function Communication:_sync_buffer_state(bufnr)
@@ -225,36 +243,124 @@ function Communication:send_file_content(opts)
     local bufname = vim.api.nvim_buf_get_name(bufnr)
     local is_unnamed = not bufname or bufname == ""
 
-    local path = bufname
-    if is_unnamed then
-        path = string.format("Untitled-%d", bufnr)
-    end
-
     git.is_ignored(bufname, function(ignored)
-        vim.schedule(function()
-            if ignored and not is_unnamed then
-                log.debug("comm", "skipping file-content; git ignored: %s", bufname)
-                return
-            end
+        if ignored and not is_unnamed then
+            log.debug("comm", "skipping file-content; git ignored: %s", bufname)
+            return
+        end
 
-            local payload = {
-                type = "file-content",
-                path = path,
-                text = buffer_content(bufnr),
-            }
+        git.get_repo_root(function(git_root)
+            vim.schedule(function()
+                local path
+                if is_unnamed then
+                    path = string.format("Untitled-%d", bufnr)
+                elseif git_root and bufname:sub(1, #git_root) == git_root then
+                    -- Make path relative to git root
+                    path = bufname:sub(#git_root + 2) -- +2 to skip the trailing slash
+                else
+                    path = bufname
+                end
 
-            local ok, message = pcall(vim.json.encode, payload)
-            if not ok then
-                log.debug("comm", "failed to encode file-content payload: %s", tostring(message))
-                return
-            end
+                local content = buffer_content(bufnr)
+                local payload = {
+                    type = "file-content",
+                    path = path,
+                    text = content,
+                }
 
-            if not websocket.send_message(message) then
-                log.debug("comm", "failed to send file-content for %s", bufname)
-            end
+                local ok, message = pcall(vim.json.encode, payload)
+                if not ok then
+                    log.debug("comm", "failed to encode file-content payload: %s", tostring(message))
+                    return
+                end
+
+                log.debug("comm", "-> [file-content] path=%s, len=%d, text=%q", path, #content, content)
+
+                if not websocket.send_message(message) then
+                    log.debug("comm", "failed to send file-content for %s", bufname)
+                else
+                    -- Track content for future delta calculations
+                    buffer_texts[bufnr] = content
+                end
+            end)
         end)
     end)
 
+    return true
+end
+
+-- Send incremental file delta instead of full content (synchronous)
+function Communication:send_file_delta(opts)
+    if not self:is_websocket() then
+        return false, "websocket_only"
+    end
+
+    opts = opts or {}
+    local bufnr = opts.bufnr or vim.api.nvim_get_current_buf()
+    if not vim.api.nvim_buf_is_valid(bufnr) then
+        return false, "invalid_buffer"
+    end
+
+    local new_content = buffer_content(bufnr)
+    local old_content = buffer_texts[bufnr]
+
+    -- If we don't have previous content, send full file-content synchronously
+    if not old_content then
+        local bufname = vim.api.nvim_buf_get_name(bufnr)
+        local path = bufname ~= "" and relative_path(bufname) or string.format("Untitled-%d", bufnr)
+
+        local payload = {
+            type = "file-content",
+            path = path,
+            text = new_content,
+        }
+
+        local ok, message = pcall(vim.json.encode, payload)
+        if not ok then
+            log.debug("comm", "failed to encode file-content payload: %s", tostring(message))
+            return false, "encode_error"
+        end
+
+        log.debug("comm", "-> [file-content] path=%s, len=%d", path, #new_content)
+
+        if not websocket.send_message(message) then
+            log.debug("comm", "failed to send file-content")
+            return false, "send_error"
+        end
+
+        buffer_texts[bufnr] = new_content
+        return true
+    end
+
+    -- If content hasn't changed, nothing to do
+    if old_content == new_content then
+        return true
+    end
+
+    local start, end_pos, insert_text = delta.compute_delta(old_content, new_content)
+
+    local payload = {
+        type = "file-delta",
+        start = start,
+        ["end"] = end_pos,
+        text = insert_text,
+    }
+
+    local ok, message = pcall(vim.json.encode, payload)
+    if not ok then
+        log.debug("comm", "failed to encode file-delta payload: %s", tostring(message))
+        return false, "encode_error"
+    end
+
+    log.debug("comm", "-> [file-delta] start=%d, end=%d, text=%q", start, end_pos, insert_text)
+
+    if not websocket.send_message(message) then
+        log.debug("comm", "failed to send file-delta")
+        return false, "send_error"
+    end
+
+    -- Update tracked content
+    buffer_texts[bufnr] = new_content
     return true
 end
 
@@ -304,6 +410,9 @@ function Communication:_request_websocket_completion(opts)
             log.debug("comm", "-> [delta-completion-request] %s %s %d", request_id, repo, pos)
 
             vim.schedule(function()
+                -- Send file delta first to ensure server has latest content
+                self:send_file_delta({ bufnr = bufnr })
+
                 if not websocket.send_message(message) then
                     log.debug("comm", "failed to send completion request")
                     return
@@ -333,12 +442,10 @@ end
 
 function Communication:request_completion(opts)
     if self:is_websocket() then
-        self:send_file_content({ bufnr = opts.bufnr })
         return self:_request_websocket_completion(opts)
     elseif self:is_sse() then
         return self:_request_sse_completion(opts)
     end
-
     return false, "not_connected"
 end
 
@@ -347,6 +454,9 @@ function Communication:resync_all_buffers()
     if not self:is_websocket() then
         return
     end
+
+    -- Clear tracked content so we send full file content
+    buffer_texts = {}
 
     local buffers = vim.api.nvim_list_bufs()
     for _, bufnr in ipairs(buffers) do
