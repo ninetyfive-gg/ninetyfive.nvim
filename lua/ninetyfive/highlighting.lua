@@ -238,7 +238,7 @@ end
 -- match_positions is a table where match_positions[i] = true means character i is matched
 function M.highlight_completion_with_matches(completion_text, bufnr, match_positions)
     if not completion_text or completion_text == "" then
-        return { { { "", get_ghost_highlight(nil) } } }
+        return { { "", get_ghost_highlight(nil) } }
     end
 
     bufnr = bufnr or vim.api.nvim_get_current_buf()

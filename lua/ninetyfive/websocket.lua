@@ -341,7 +341,17 @@ function Websocket.setup_connection(server_uri, user_id, api_key)
                                 end
                             end
 
-                            suggestion.show(c.completion)
+                            -- Only show if there's actual content (not just a flush marker)
+                            local has_content = false
+                            for _, item in ipairs(c.completion) do
+                                if item ~= vim.NIL then
+                                    has_content = true
+                                    break
+                                end
+                            end
+                            if has_content then
+                                suggestion.show(c.completion)
+                            end
                         end
                     end
                 end
