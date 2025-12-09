@@ -45,7 +45,10 @@ Default values:
           enabled = true,
           -- Sets a global mapping to accept a suggestion
           accept = "<Tab>",
-          accept_edit = "<C-g>",
+          -- Mapping to accept the next word
+          accept_word = "<C-h>",
+          -- Mapping to accep the next line
+          accept_line = "<C-j>",
           -- Sets a global mapping to reject a suggestion
           reject = "<C-w>",
       },
@@ -91,6 +94,19 @@ Parameters ~
 {callback} `(fun(...)|nil)`
 Return ~
 `(fun(...)|nil)`
+
+
+==============================================================================
+------------------------------------------------------------------------------
+                                                                 *M.post_json()*
+              `M.post_json`({url}, {headers}, {body}, {callback})
+Async POST JSON to a URL. Calls callback(ok, status_code, body_or_error).
+Uses libcurl with TLS session reuse when available, falls back to curl CLI.
+Parameters ~
+{url} `(string)`
+{headers} `(string[])`
+{body} `(string)`
+{callback} `(fun(ok: boolean, status: number|nil, body_or_error: string|nil))`
 
 
  vim:tw=78:ts=8:noet:ft=help:norl:

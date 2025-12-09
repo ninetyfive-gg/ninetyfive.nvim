@@ -151,29 +151,37 @@ if ok_ffi then
                     }
 
                     -- Timer callback from curl telling us when to call socket_action
-                    local timer_cb = ffi.cast("curl_multi_timer_callback", function(_, timeout_ms_cdata, _)
-                        local timeout_ms = tonumber(timeout_ms_cdata)
-                        if curl_state.timer then
-                            curl_state.timer:stop()
-                        end
+                    local timer_cb = ffi.cast(
+                        "curl_multi_timer_callback",
+                        function(_, timeout_ms_cdata, _)
+                            local timeout_ms = tonumber(timeout_ms_cdata)
+                            if curl_state.timer then
+                                curl_state.timer:stop()
+                            end
 
-                        if timeout_ms < 0 then
+                            if timeout_ms < 0 then
+                                return 0
+                            end
+
+                            if not curl_state.timer then
+                                curl_state.timer = uv.new_timer()
+                            end
+
+                            curl_state.timer:start(math.max(1, timeout_ms), 0, function()
+                                if curl_state and curl_state.multi then
+                                    curl.curl_multi_socket_action(
+                                        curl_state.multi,
+                                        CURL_SOCKET_TIMEOUT,
+                                        0,
+                                        curl_state.running
+                                    )
+                                    M._check_completed()
+                                end
+                            end)
+
                             return 0
                         end
-
-                        if not curl_state.timer then
-                            curl_state.timer = uv.new_timer()
-                        end
-
-                        curl_state.timer:start(math.max(1, timeout_ms), 0, function()
-                            if curl_state and curl_state.multi then
-                                curl.curl_multi_socket_action(curl_state.multi, CURL_SOCKET_TIMEOUT, 0, curl_state.running)
-                                M._check_completed()
-                            end
-                        end)
-
-                        return 0
-                    end)
+                    )
 
                     -- Socket callback from curl for socket state changes
                     local socket_cb = ffi.cast("curl_socket_callback", function(_, s, what, _, _)
@@ -228,7 +236,12 @@ if ok_ffi then
                                     if evts and evts:find("w") then
                                         ev_bitmask = bit.bor(ev_bitmask, CURL_POLL_OUT)
                                     end
-                                    curl.curl_multi_socket_action(curl_state.multi, s, ev_bitmask, curl_state.running)
+                                    curl.curl_multi_socket_action(
+                                        curl_state.multi,
+                                        s,
+                                        ev_bitmask,
+                                        curl_state.running
+                                    )
                                     M._check_completed()
                                 end)
                             end)
@@ -405,7 +418,8 @@ local function shell_post(url, headers, body, callback)
         return
     end
 
-    local args = { "-sS", "-X", "POST", url, "-w", "\n%{http_code}", "--connect-timeout", "30", "-m", "60" }
+    local args =
+        { "-sS", "-X", "POST", url, "-w", "\n%{http_code}", "--connect-timeout", "30", "-m", "60" }
     for _, h in ipairs(headers) do
         table.insert(args, "-H")
         table.insert(args, h)

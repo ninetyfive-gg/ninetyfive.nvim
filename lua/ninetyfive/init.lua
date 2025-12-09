@@ -2,12 +2,82 @@ local main = require("ninetyfive.main")
 local config = require("ninetyfive.config")
 local log = require("ninetyfive.util.log")
 local state = require("ninetyfive.state")
-local transport = require("ninetyfive.transport")
-local completion_state = require("ninetyfive.completion_state")
+local Communication = require("ninetyfive.communication")
+local CommunicationAutocmds = require("ninetyfive.communication_autocmds")
+local Completion = require("ninetyfive.completion")
+local suggestion = require("ninetyfive.suggestion")
+local websocket = require("ninetyfive.websocket")
+
+local communication = Communication.new()
+local autocmds = CommunicationAutocmds.new({ communication = communication })
+
+-- Register callback to resync buffers after websocket reconnection
+websocket.on_reconnect(function()
+    communication:resync_all_buffers()
+end)
 
 math.randomseed(os.time())
 
 local Ninetyfive = {}
+
+local function get_plugin_root()
+    local runtime = vim.api.nvim_get_runtime_file("lua/ninetyfive/init.lua", false)[1] or ""
+    return vim.fn.fnamemodify(runtime, ":h:h:h")
+end
+
+local function has_dist_directory()
+    local plugin_root = get_plugin_root()
+    if plugin_root == "" then
+        return true
+    end
+    local dist_dir = plugin_root .. "/dist"
+    return vim.fn.isdirectory(dist_dir) == 1
+end
+
+local function shutdown_connection()
+    autocmds:clear()
+    communication:shutdown()
+end
+
+local function setup_connection(server, user_id, api_key)
+    shutdown_connection()
+
+    communication:configure({
+        server_uri = server,
+        user_id = user_id,
+        api_key = api_key,
+    })
+
+    local dist_available = has_dist_directory()
+    communication:configure({
+        preferred = dist_available and "websocket" or "sse",
+        allow_fallback = dist_available,
+    })
+
+    local ok, mode = communication:connect()
+    if ok then
+        autocmds:setup_autocommands()
+        return true, mode
+    end
+
+    if not dist_available then
+        log.notify(
+            "transport",
+            vim.log.levels.ERROR,
+            true,
+            "Failed to enable SSE fallback despite missing dist directory"
+        )
+    else
+        log.notify(
+            "transport",
+            vim.log.levels.ERROR,
+            true,
+            string.format("Failed to establish Ninetyfive transport (%s)", tostring(mode))
+        )
+    end
+
+    return false
+end
 
 local function generate_user_id()
     local chars = "0123456789abcdefghijklmnopqrstuvwxyz"
@@ -63,10 +133,11 @@ function Ninetyfive.toggle()
         local server = _G.Ninetyfive.config.server
         log.debug("toggle", "Setting up transport after toggle")
         local user_data = get_user_data()
-        transport.setup_connection(server, user_data.user_id, user_data.api_key)
+        setup_connection(server, user_data.user_id, user_data.api_key)
     else
-        transport.shutdown()
-        completion_state.clear()
+        shutdown_connection()
+        suggestion.clear()
+        Completion.clear()
     end
 end
 
@@ -80,7 +151,7 @@ function Ninetyfive.enable(scope)
 
     -- Set up autocommands when plugin is enabled
     local user_data = get_user_data()
-    transport.setup_connection(server, user_data.user_id, user_data.api_key)
+    setup_connection(server, user_data.user_id, user_data.api_key)
 
     main.toggle(scope or "public_api_enable")
 end
@@ -100,7 +171,7 @@ function Ninetyfive.setup(opts)
         local user_data = get_user_data()
         -- Set up autocommands when plugin is enabled
         local server = _G.Ninetyfive.config.server
-        transport.setup_connection(server, user_data.user_id, user_data.api_key)
+        setup_connection(server, user_data.user_id, user_data.api_key)
     end
 end
 
@@ -139,20 +210,25 @@ function Ninetyfive.setApiKey(api_key)
         local server = _G.Ninetyfive.config.server
         local user_data = get_user_data()
 
-        transport.setup_connection(server, user_data.user_id, user_data.api_key)
+        setup_connection(server, user_data.user_id, user_data.api_key)
     end
 end
 
 function Ninetyfive.accept()
-    transport.accept()
+    suggestion.accept()
 end
 
-function Ninetyfive.accept_edit(edit)
-    transport.accept_edit()
+function Ninetyfive.accept_word()
+    suggestion.accept_word()
+end
+
+function Ninetyfive.accept_line()
+    suggestion.accept_line()
 end
 
 function Ninetyfive.reject()
-    transport.reject()
+    Completion.clear() -- right?
+    suggestion.clear()
 end
 
 _G.Ninetyfive = Ninetyfive

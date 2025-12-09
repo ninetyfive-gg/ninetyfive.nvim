@@ -269,7 +269,7 @@ function git.is_ignored(file_path, callback)
     callback = ensure_cb(callback)
 
     if not file_path or file_path == "" then
-        callback(true)
+        callback(false) -- allow completions for unnamed buffers
         return
     end
 

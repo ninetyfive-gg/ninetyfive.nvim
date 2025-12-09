@@ -1,10 +1,10 @@
 local log = require("ninetyfive.util.log")
 local suggestion = require("ninetyfive.suggestion")
-local completion = require("ninetyfive.completion")
+local Completion = require("ninetyfive.completion")
 local git = require("ninetyfive.git")
-local completion_state = require("ninetyfive.completion_state")
 local ignored_filetypes = require("ninetyfive.ignored_filetypes")
 local global_state = require("ninetyfive.state")
+local util = require("ninetyfive.util")
 
 local Sse = {}
 
@@ -17,18 +17,6 @@ local state = {
 }
 
 local path_sep = package.config:sub(1, 1)
-
-local function get_current_completion()
-    return completion_state.get_current_completion()
-end
-
-local function set_current_completion(value)
-    completion_state.set_current_completion(value)
-end
-
-local function set_buffer(value)
-    completion_state.set_buffer(value)
-end
 
 local function build_relative_path(bufname, git_root)
     if not bufname or bufname == "" then
@@ -76,7 +64,7 @@ local function handle_message(parsed)
         return
     end
 
-    local current_completion = get_current_completion()
+    local current_completion = Completion.get()
     if not current_completion then
         return
     end
@@ -85,36 +73,19 @@ local function handle_message(parsed)
         return
     end
 
-    if parsed.content ~= nil then
-        local chunk = { v = parsed.content }
-        if parsed.flush then
-            chunk.flush = true
-        end
-        table.insert(current_completion.completion, chunk)
-        suggestion.show(current_completion.completion)
-    elseif parsed.flush then
-        local last_item = current_completion.completion[#current_completion.completion]
-        if last_item then
-            last_item.flush = true
-            suggestion.show(current_completion.completion)
+    if parsed.content ~= nil and parsed.content ~= vim.NIL then
+        table.insert(current_completion.completion, parsed.content)
+        current_completion.is_active = true
+    end
+
+    if parsed.flush == true or parsed["end"] == true then
+        table.insert(current_completion.completion, vim.NIL)
+        if parsed["end"] == true then
+            current_completion.is_active = false
         end
     end
 
-    if parsed.edits then
-        current_completion.edits = parsed.edits
-    end
-
-    if parsed.edit_description then
-        current_completion.edit_description = parsed.edit_description
-    end
-
-    if parsed.active ~= nil then
-        current_completion.is_active = parsed.active
-    end
-
-    if parsed["end"] then
-        current_completion:close()
-    end
+    suggestion.show(current_completion.completion)
 end
 
 local function start_request(payload)
@@ -196,7 +167,6 @@ local function start_request(payload)
     table.insert(curl_cmd, "@-")
 
     log.debug("sse", "payload bytes: %d (gzip=%s)", #body, tostring(use_gzip))
-    log.debug("sse", "curl command: %s", table.concat(curl_cmd, " "))
 
     local job_opts = {
         on_stdout = function(_, data, _)
@@ -248,8 +218,7 @@ local function start_request(payload)
                     "SSE request exited with code " .. tostring(code)
                 )
                 suggestion.clear()
-                set_current_completion(nil)
-                set_buffer(nil)
+                Completion.clear()
             end
         end,
         stdout_buffered = false,
@@ -296,7 +265,8 @@ function Sse.request_completion(args)
         return
     end
 
-    if get_current_completion() ~= nil then
+    local current_completion = Completion.get()
+    if current_completion ~= nil then
         return
     end
 
@@ -340,8 +310,12 @@ function Sse.request_completion(args)
 
     local request_id = tostring(os.time()) .. "_" .. tostring(math.random(1000, 9999))
 
-    set_buffer(bufnr)
-    set_current_completion(completion.new(request_id))
+    local new_completion = Completion.new(request_id)
+    local curr_text = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
+    local current_prefix = util.get_cursor_prefix(bufnr, cursor) -- maybe just pass it? and maybe add them to the "constructor" lol
+    new_completion.buffer = bufnr
+    new_completion.active_text = curr_text
+    new_completion.prefix = current_prefix
 
     local payload = {
         user_id = state.user_id,
@@ -353,8 +327,7 @@ function Sse.request_completion(args)
     }
 
     if not start_request(payload) then
-        set_current_completion(nil)
-        set_buffer(nil)
+        Completion.clear()
     end
 end
 
@@ -364,10 +337,8 @@ function Sse.shutdown()
         vim.fn.jobstop(state.current_job)
         state.current_job = nil
     end
-    completion_state.clear()
-    completion_state.clear_suggestion()
-    completion_state.set_buffer(nil)
-    completion_state.set_active_text(nil)
+    suggestion.clear()
+    Completion.clear()
 end
 
 function Sse.setup(opts)
@@ -395,91 +366,6 @@ function Sse.setup(opts)
     state.sse_uri = base_url .. "/completions"
 
     return true
-end
-
-function Sse.setup_autocommands()
-    local group = vim.api.nvim_create_augroup("Ninetyfive", { clear = true })
-
-    vim.api.nvim_create_autocmd({ "CursorMovedI" }, {
-        pattern = "*",
-        group = group,
-        callback = function(args)
-            if vim.b[args.buf].ninetyfive_accepting then
-                return
-            end
-
-            completion_state.clear_suggestion()
-            completion_state.clear()
-        end,
-    })
-
-    vim.api.nvim_create_autocmd({ "TextChangedI" }, {
-        pattern = "*",
-        group = group,
-        callback = function(args)
-            local bufnr = args.buf
-            local filetype = vim.bo[bufnr].filetype
-
-            if vim.tbl_contains(ignored_filetypes, filetype) then
-                return
-            end
-
-            if not global_state:get_enabled() then
-                return
-            end
-
-            if vim.b[bufnr].ninetyfive_accepting then
-                return
-            end
-
-            completion_state.clear_suggestion()
-            completion_state.clear()
-
-            vim.schedule(function()
-                local curr_text =
-                    table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
-                completion_state.set_active_text(curr_text)
-                Sse.request_completion(args)
-            end)
-        end,
-    })
-
-    vim.api.nvim_create_autocmd({ "BufReadPost" }, {
-        pattern = "*",
-        group = group,
-        callback = function(args)
-            local bufnr = args.buf
-            local filetype = vim.bo[bufnr].filetype
-
-            if vim.tbl_contains(ignored_filetypes, filetype) then
-                return
-            end
-
-            if not global_state:get_enabled() then
-                return
-            end
-
-            local curr_text = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
-            completion_state.set_active_text(curr_text)
-        end,
-    })
-
-    vim.api.nvim_create_autocmd("InsertLeave", {
-        group = group,
-        callback = function(args)
-            completion_state.clear_suggestion()
-            completion_state.clear()
-            vim.b[args.buf].ninetyfive_accepting = false
-        end,
-    })
-
-    vim.api.nvim_create_autocmd("VimLeavePre", {
-        group = group,
-        callback = function()
-            Sse.shutdown()
-        end,
-        desc = "[ninetyfive] Close SSE request on exit",
-    })
 end
 
 return Sse

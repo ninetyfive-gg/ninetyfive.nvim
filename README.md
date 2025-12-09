@@ -106,8 +106,10 @@ require("ninetyfive").setup({
     enabled = true,
     -- Sets a global mapping to accept a suggestion
     accept = "<Tab>",
-    -- Sets a global mapping to accept a suggestion and edit
-    accept_edit = "<C-g>",
+    -- Sets a global mapping to accept the next word
+    accept_word = "<C-h>",
+    -- Sets a global mapping to accept the next line
+    accept_line = "<C-j>",
     -- Sets a global mapping to reject a suggestion
     reject = "<C-w>",
   },
@@ -139,7 +141,8 @@ use {
       mappings = {
         enabled = true,
         accept = "<Tab>",
-        accept_edit = "<C-g>",
+        accept_word = "<C-h>",
+        accept_line = "<C-j>",
         reject = "<C-w>",
       },
       indexing = {
@@ -165,7 +168,8 @@ require("ninetyfive").setup({
   mappings = {
     enabled = true,
     accept = "<Tab>",
-    accept_edit = "<C-g>",
+    accept_word = "<C-h>",
+    accept_line = "<C-j>",
     reject = "<C-w>",
   },
   indexing = {
@@ -178,7 +182,7 @@ EOF
 
 #### Using [folke/lazy.nvim](https://github.com/folke/lazy.nvim)
 
-Create a plugin file (e.g., `~/.config/nvim/lua/plugins/ninetyfive.lua`):
+Update your lazy config (generally in `~/.config/nvim/init.lua`) or create a plugin file (e.g., `~/.config/nvim/lua/plugins/ninetyfive.lua`):
 
 ```lua
 return {
@@ -192,7 +196,8 @@ return {
       mappings = {
         enabled = true,
         accept = "<Tab>",
-        accept_edit = "<C-g>",
+        accept_word = "<C-h>",
+        accept_line = "<C-j>",
         reject = "<C-w>",
       },
       indexing = {

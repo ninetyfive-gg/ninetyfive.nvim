@@ -20,9 +20,13 @@ else
         require("ninetyfive").accept()
     end, { desc = "Accepts a suggestion." })
 
-    vim.api.nvim_create_user_command("NinetyFiveAcceptEdit", function()
-        require("ninetyfive").accept_edit()
-    end, { desc = "Accepts an edit." })
+    vim.api.nvim_create_user_command("NinetyFiveAcceptWord", function()
+        require("ninetyfive").accept_word()
+    end, { desc = "Accepts the next word from a suggestion." })
+
+    vim.api.nvim_create_user_command("NinetyFiveAcceptLine", function()
+        require("ninetyfive").accept_line()
+    end, { desc = "Accepts the next line from a suggestion." })
 
     vim.api.nvim_create_user_command("NinetyFiveReject", function()
         require("ninetyfive").reject()
