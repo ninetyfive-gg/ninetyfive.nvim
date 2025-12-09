@@ -230,31 +230,11 @@ local function accept_with_selector(selector)
     local line, col = extmark[1], extmark[2]
     vim.b[bufnr].ninetyfive_accepting = true
     local applied = apply_completion_text(bufnr, line, col, accepted_text)
-    -- vim.b[bufnr].ninetyfive_accepting = false
     if not applied then
         return
     end
 
     current_completion.last_accepted = accepted_text
-
-    -- local accepted_length = #accepted_text
-    -- local consumed_entire_completion = accepted_length >= #completion_text
-    -- local consume_count = consumed_entire_completion and (accepted_length + 1) or accepted_length
-
-    -- local updated_completion = consumeChars(current_completion.completion, consume_count)
-    -- current_completion.completion = updated_completion
-
-    -- if #updated_completion > 0 then
-    --     if consumed_entire_completion then
-    --         table.insert(updated_completion, 1, "\n")
-    --     end
-    --     vim.b[bufnr].ninetyfive_accepting = true
-    --     suggestion.show(updated_completion)
-    -- else
-    --     vim.b[bufnr].ninetyfive_accepting = false
-    --     completion_id = ""
-    --     completion_bufnr = nil
-    -- end
 end
 
 local function select_next_word(text)
