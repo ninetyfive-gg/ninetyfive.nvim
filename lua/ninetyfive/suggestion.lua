@@ -1,7 +1,9 @@
 local suggestion = {}
 local ninetyfive_ns = vim.api.nvim_create_namespace("ninetyfive_ghost_ns")
+local ninetyfive_delete_ns = vim.api.nvim_create_namespace("ninetyfive_delete_ns")
 local Completion = require("ninetyfive.completion")
 local highlighting = require("ninetyfive.highlighting")
+local diff = require("ninetyfive.diff")
 
 local completion_id = ""
 local completion_bufnr = nil
@@ -9,43 +11,166 @@ local completion_bufnr = nil
 local log = require("ninetyfive.util.log")
 local lsp_util = vim.lsp.util
 
+-- Highlight group for text to be deleted (red + strikethrough)
+local function setup_delete_highlight()
+    vim.api.nvim_set_hl(0, "NinetyFiveDelete", {
+        strikethrough = true,
+        fg = "#ff6666",
+        bg = "#3d1f1f",
+    })
+end
+
 suggestion.show = function(completion)
-    if vim.fn.mode() ~= 'i' then
+    if vim.fn.mode() ~= "i" then
         -- Do not show a suggestion if not in insert mode!
         return
     end
+
     -- build text up to the next flush
     local parts = {}
+    local is_complete = false
     if type(completion) == "table" then
+        log.debug("suggestion", "show() - completion array has %d items", #completion)
         for i = 1, #completion do
             local item = completion[i]
-            if item == vim.NIL then -- Stop at first nil
+            if item == vim.NIL then -- Stop at first nil (flush marker)
+                log.debug("suggestion", "show() - found flush at index %d", i)
+                is_complete = true
                 break
             end
+            log.debug("suggestion", "show() - chunk[%d]: %q", i, tostring(item))
             table.insert(parts, tostring(item))
         end
     end
 
     local text = table.concat(parts)
+    log.debug("suggestion", "show() - full text: %q (len=%d)", text, #text)
 
     local bufnr = vim.api.nvim_get_current_buf()
     -- Clear any existing extmarks in the buffer
     if bufnr ~= nil and vim.api.nvim_buf_is_valid(bufnr) then
         vim.api.nvim_buf_del_extmark(bufnr, ninetyfive_ns, 1)
+        vim.api.nvim_buf_clear_namespace(bufnr, ninetyfive_delete_ns, 0, -1)
     end
 
     local cursor_line = vim.fn.line(".") - 1
     local cursor_col = vim.fn.col(".") - 1
 
-    -- Get syntax-highlighted lines using full buffer context
-    local virt_lines = highlighting.highlight_completion(text, bufnr)
-    local first_line = table.remove(virt_lines, 1) or { { "", "NinetyFiveGhost" } }
+    -- Split completion into first line and remaining lines
+    local lines = vim.split(text, "\n", { plain = true })
+    local first_line_text = lines[1] or ""
+    local remaining_lines = {}
+    for i = 2, #lines do
+        table.insert(remaining_lines, lines[i])
+    end
+
+    -- Get text after cursor on current line (the "buffer" for diff)
+    local current_line = vim.api.nvim_buf_get_lines(bufnr, cursor_line, cursor_line + 1, false)[1] or ""
+    local buffer_after_cursor = current_line:sub(cursor_col + 1)
+
+    log.debug("suggestion", "show() - cursor_line=%d, cursor_col=%d", cursor_line, cursor_col)
+    log.debug("suggestion", "show() - current_line=%q", current_line)
+    log.debug("suggestion", "show() - first_line_text=%q", first_line_text)
+    log.debug("suggestion", "show() - buffer_after_cursor=%q", buffer_after_cursor)
+    log.debug("suggestion", "show() - is_complete=%s", tostring(is_complete))
+
+    -- Calculate diff between first line of completion and buffer
+    local diff_result = diff.calculate_diff(first_line_text, buffer_after_cursor, is_complete)
+
+    log.debug("suggestion", "show() - diff returned %d edits", #diff_result.edits)
+
+    -- Count ghost edits to detect fragmented diffs
+    local ghost_count = 0
+    for _, edit in ipairs(diff_result.edits) do
+        if edit.type == "ghost" then
+            ghost_count = ghost_count + 1
+        end
+    end
+
+    -- Build virtual text for first line based on diff
+    local first_line_virt_text = {}
+
+    -- If diff is too fragmented (more than 2 ghost segments), fall back to simple rendering
+    -- This happens when greedy matching produces many small interspersed edits
+    local use_simple_rendering = ghost_count > 2
+
+    if use_simple_rendering then
+        log.debug("suggestion", "show() - using simple rendering (ghost_count=%d)", ghost_count)
+        -- Simple rendering: show full completion as ghost text
+        local highlighted = highlighting.highlight_completion(first_line_text, bufnr)
+        if highlighted[1] then
+            for _, segment in ipairs(highlighted[1]) do
+                table.insert(first_line_virt_text, segment)
+            end
+        end
+        -- Mark entire buffer after cursor for deletion if complete
+        if is_complete and buffer_after_cursor ~= "" then
+            setup_delete_highlight()
+            vim.api.nvim_buf_add_highlight(
+                bufnr,
+                ninetyfive_delete_ns,
+                "NinetyFiveDelete",
+                cursor_line,
+                cursor_col,
+                cursor_col + #buffer_after_cursor
+            )
+            log.debug("suggestion", "show() - simple: marking buffer for deletion: col %d-%d",
+                cursor_col, cursor_col + #buffer_after_cursor)
+        end
+    else
+        -- Use diff-based rendering for clean diffs
+        for idx, edit in ipairs(diff_result.edits) do
+            log.debug("suggestion", "show() - processing edit[%d]: type=%s, offset=%d, text=%q",
+                idx, edit.type, edit.offset, edit.text)
+            if edit.type == "ghost" then
+                -- Get highlighted segments for this ghost text
+                local highlighted = highlighting.highlight_completion(edit.text, bufnr)
+                if highlighted[1] then
+                    for _, segment in ipairs(highlighted[1]) do
+                        table.insert(first_line_virt_text, segment)
+                    end
+                end
+                log.debug("suggestion", "show() - added ghost text to virt_text")
+            elseif edit.type == "delete" and is_complete then
+                -- Add delete highlight to existing buffer text
+                setup_delete_highlight()
+                local delete_start_col = cursor_col + edit.offset
+                local delete_end_col = delete_start_col + #edit.text
+                log.debug("suggestion", "show() - adding delete highlight: col %d-%d",
+                    delete_start_col, delete_end_col)
+                vim.api.nvim_buf_add_highlight(
+                    bufnr,
+                    ninetyfive_delete_ns,
+                    "NinetyFiveDelete",
+                    cursor_line,
+                    delete_start_col,
+                    delete_end_col
+                )
+            end
+            -- "match" type: text already in buffer, no virtual text needed
+        end
+    end
+
+    log.debug("suggestion", "show() - first_line_virt_text has %d segments", #first_line_virt_text)
+
+    -- If no ghost text edits, use empty virtual text
+    if #first_line_virt_text == 0 then
+        first_line_virt_text = { { "", "NinetyFiveGhost" } }
+        log.debug("suggestion", "show() - no ghost edits, using empty virt_text")
+    end
+
+    -- Get highlighted virtual lines for remaining lines
+    local virt_lines = {}
+    if #remaining_lines > 0 then
+        local remaining_text = table.concat(remaining_lines, "\n")
+        virt_lines = highlighting.highlight_completion(remaining_text, bufnr)
+    end
 
     -- Use inline positioning (Neovim 0.10+) to push text right, fall back to overlay
     local has_inline = vim.fn.has("nvim-0.10") == 1
     local extmark_opts = {
         id = 1,
-        virt_text = first_line,
+        virt_text = first_line_virt_text,
         virt_lines = virt_lines,
         hl_mode = "combine",
         ephemeral = false,
@@ -346,6 +471,7 @@ suggestion.clear = function()
     local buffer = vim.api.nvim_get_current_buf()
     if buffer ~= nil and vim.api.nvim_buf_is_valid(buffer) then
         vim.api.nvim_buf_del_extmark(buffer, ninetyfive_ns, 1)
+        vim.api.nvim_buf_clear_namespace(buffer, ninetyfive_delete_ns, 0, -1)
     end
     completion_id = ""
     completion_bufnr = nil
