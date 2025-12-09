@@ -78,6 +78,10 @@ T["start_request always uses stdin for curl data"] = function()
         -- Request completion (this will call start_request internally)
         sse.request_completion({ buf = bufnr })
 
+        vim.wait(100, function()
+            return captured_cmd ~= nil
+        end)
+
         _G.captured_cmd = captured_cmd
         _G.captured_opts = captured_opts
 
@@ -163,6 +167,10 @@ T["start_request sends body via chansend"] = function()
         vim.cmd("startinsert")
 
         sse.request_completion({ buf = bufnr })
+
+        vim.wait(100, function()
+            return chansend_called
+        end)
 
         _G.chansend_called = chansend_called
         _G.chanclose_called = chanclose_called
