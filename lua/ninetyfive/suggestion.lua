@@ -1,6 +1,7 @@
 local suggestion = {}
 local ninetyfive_ns = vim.api.nvim_create_namespace("ninetyfive_ghost_ns")
 local Completion = require("ninetyfive.completion")
+local config = require("ninetyfive.config")
 local highlighting = require("ninetyfive.highlighting")
 local diff = require("ninetyfive.diff")
 
@@ -9,6 +10,24 @@ local completion_bufnr = nil
 
 local log = require("ninetyfive.util.log")
 local lsp_util = vim.lsp.util
+local function current_config()
+    if _G.Ninetyfive and _G.Ninetyfive.config then
+        return _G.Ninetyfive.config
+    end
+    return config.options or {}
+end
+
+local function is_cmp_mode_enabled()
+    local cfg = current_config()
+    return cfg.use_cmp == true
+end
+
+local function trigger_cmp_complete()
+    local ok, cmp = pcall(require, "cmp")
+    if ok and cmp and type(cmp.complete) == "function" then
+        cmp.complete()
+    end
+end
 
 -- Highlight group for text to be deleted (red + strikethrough)
 local function setup_delete_highlight()
@@ -45,6 +64,7 @@ suggestion.show = function(completion)
     if vim.fn.mode() ~= "i" then
         return
     end
+    local cmp_mode = is_cmp_mode_enabled()
 
     -- Build text up to the next flush
     local parts = {}
@@ -62,6 +82,10 @@ suggestion.show = function(completion)
 
     local text = table.concat(parts)
     log.debug("suggestion", "show() - text: %q, is_complete: %s", text, tostring(is_complete))
+    if cmp_mode then
+        trigger_cmp_complete()
+        return
+    end
 
     local bufnr = vim.api.nvim_get_current_buf()
     -- Clear any existing extmarks
@@ -135,7 +159,7 @@ suggestion.show = function(completion)
     )
     completion_bufnr = bufnr
     log.debug("suggestion", "show() - extmark set at line=%d, col=%d", cursor_line, cursor_col)
-    require('cmp').complete()
+    trigger_cmp_complete()
 end
 
 function suggestion.get_current_extmark_position(bufnr)
