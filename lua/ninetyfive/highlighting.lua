@@ -129,6 +129,106 @@ local function make_fallback_result(completion_text)
     return result
 end
 
+-- Get TreeSitter language for buffer, or nil if not available
+local function get_ts_lang(bufnr)
+    local filetype = vim.bo[bufnr].filetype
+    if not filetype or filetype == "" then
+        return nil
+    end
+    local lang = vim.treesitter.language.get_lang(filetype) or filetype
+    if not pcall(vim.treesitter.language.inspect, lang) then
+        return nil
+    end
+    return lang
+end
+
+-- Get buffer context (prefix before cursor, suffix after cursor)
+local function get_buffer_context(bufnr)
+    local cursor = vim.api.nvim_win_get_cursor(0)
+    local lines_before = vim.api.nvim_buf_get_lines(bufnr, 0, cursor[1], false)
+    if #lines_before > 0 then
+        lines_before[#lines_before] = lines_before[#lines_before]:sub(1, cursor[2])
+    end
+    local prefix = table.concat(lines_before, "\n")
+
+    local lines_after = vim.api.nvim_buf_get_lines(bufnr, cursor[1] - 1, -1, false)
+    if #lines_after > 0 then
+        lines_after[1] = lines_after[1]:sub(cursor[2] + 1)
+    end
+    local suffix = table.concat(lines_after, "\n")
+
+    return prefix, suffix
+end
+
+-- Parse text with TreeSitter and return character highlights table
+-- char_highlights[i] = highlight_group for character i (1-indexed)
+local function get_ts_char_highlights(text, lang, prefix, suffix)
+    local char_highlights = {}
+    local prefix_len = #prefix
+    local full_text = prefix .. text .. suffix
+
+    local ok, parser = pcall(vim.treesitter.get_string_parser, full_text, lang)
+    if not ok or not parser then
+        return char_highlights
+    end
+
+    local trees = parser:parse()
+    local query = vim.treesitter.query.get(lang, "highlights")
+    if not trees or #trees == 0 or not query then
+        return char_highlights
+    end
+
+    -- Build line offset table
+    local line_offsets = { 0 }
+    for i = 1, #full_text do
+        if full_text:sub(i, i) == "\n" then
+            line_offsets[#line_offsets + 1] = i
+        end
+    end
+
+    for _, tree in ipairs(trees) do
+        for id, node in query:iter_captures(tree:root(), full_text, 0, -1) do
+            local start_row, start_col, end_row, end_col = node:range()
+            local node_start = (line_offsets[start_row + 1] or 0) + start_col
+            local node_end = (line_offsets[end_row + 1] or 0) + end_col
+
+            if node_end > prefix_len then
+                local hl_group = "@" .. query.captures[id] .. "." .. lang
+                for pos = math.max(node_start, prefix_len), node_end - 1 do
+                    local text_pos = pos - prefix_len + 1
+                    if text_pos >= 1 and text_pos <= #text then
+                        char_highlights[text_pos] = hl_group
+                    end
+                end
+            end
+        end
+    end
+
+    return char_highlights
+end
+
+-- Build segments from character highlights using a highlight function
+local function build_segments(text, char_highlights, get_hl)
+    local segments = {}
+    local current_hl, current_start = nil, 1
+
+    for i = 1, #text do
+        local hl = char_highlights[i]
+        if i == 1 then
+            current_hl = hl
+        elseif hl ~= current_hl then
+            segments[#segments + 1] = { text:sub(current_start, i - 1), get_hl(current_hl) }
+            current_start, current_hl = i, hl
+        end
+    end
+
+    if current_start <= #text then
+        segments[#segments + 1] = { text:sub(current_start), get_hl(current_hl) }
+    end
+
+    return segments
+end
+
 function M.highlight_completion(completion_text, bufnr)
     if not completion_text or completion_text == "" then
         return { { { "", get_ghost_highlight(nil) } } }
@@ -154,7 +254,15 @@ function M.highlight_completion(completion_text, bufnr)
     end
     local prefix = table.concat(lines_before, "\n")
     local prefix_len = #prefix
-    local full_text = prefix .. completion_text
+
+    -- Get buffer content after cursor (suffix) for proper context
+    local lines_after = vim.api.nvim_buf_get_lines(bufnr, cursor[1] - 1, -1, false)
+    if #lines_after > 0 then
+        lines_after[1] = lines_after[1]:sub(cursor[2] + 1)
+    end
+    local suffix = table.concat(lines_after, "\n")
+
+    local full_text = prefix .. completion_text .. suffix
 
     -- Parse with treesitter
     local ok, parser = pcall(vim.treesitter.get_string_parser, full_text, lang)
@@ -262,7 +370,15 @@ function M.highlight_completion_with_matches(completion_text, bufnr, match_posit
         end
         local prefix = table.concat(lines_before, "\n")
         local prefix_len = #prefix
-        local full_text = prefix .. completion_text
+
+        -- Get buffer content after cursor (suffix) for proper context
+        local lines_after = vim.api.nvim_buf_get_lines(bufnr, cursor[1] - 1, -1, false)
+        if #lines_after > 0 then
+            lines_after[1] = lines_after[1]:sub(cursor[2] + 1)
+        end
+        local suffix = table.concat(lines_after, "\n")
+
+        local full_text = prefix .. completion_text .. suffix
 
         local ok, parser = pcall(vim.treesitter.get_string_parser, full_text, lang)
         if ok and parser then
@@ -326,6 +442,34 @@ function M.highlight_completion_with_matches(completion_text, bufnr, match_posit
     end
 
     return #segments > 0 and segments or { { first_line, get_ghost_highlight(nil) } }
+end
+
+-- Get the default ghost highlight group name (for inline mode)
+function M.get_ghost_highlight_group()
+    ensure_setup()
+    return "NinetyFiveGhost"
+end
+
+-- Highlight a single ghost text chunk for inline mode
+-- Returns virt_text format: {{text, hl}, {text, hl}, ...}
+function M.highlight_ghost_text(text, bufnr)
+    if not text or text == "" then
+        return {{ "", get_ghost_highlight(nil) }}
+    end
+
+    bufnr = bufnr or vim.api.nvim_get_current_buf()
+    local lang = get_ts_lang(bufnr)
+
+    -- Without treesitter, return with default ghost highlight
+    if not lang then
+        return {{ text, get_ghost_highlight(nil) }}
+    end
+
+    local prefix, suffix = get_buffer_context(bufnr)
+    local char_highlights = get_ts_char_highlights(text, lang, prefix, suffix)
+    local segments = build_segments(text, char_highlights, get_ghost_highlight)
+
+    return #segments > 0 and segments or {{ text, get_ghost_highlight(nil) }}
 end
 
 vim.api.nvim_create_autocmd("ColorScheme", {
