@@ -104,7 +104,6 @@ function Source:_build_items(context, text)
 
     local before_cursor = context.before_cursor or ""
     local display_text = before_cursor .. text
-    local first_line = text:match("([^\n]*)") or text
     local display_line = display_text:match("([^\n]*)") or display_text
     local lsp_util = vim.lsp.util
     local encoding = "utf-8"
@@ -141,7 +140,7 @@ function Source:_build_items(context, text)
     local documentation = string.format("```%s\n%s\n```", context.filetype or "", display_text)
 
     local item = {
-        label = label_text(first_line),
+        label = label_text(display_line),
         filterText = display_line,
         sortText = display_line,
         kind = 1,
