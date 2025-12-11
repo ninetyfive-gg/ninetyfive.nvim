@@ -221,7 +221,12 @@ function CommunicationAutocmds:reconcile(args, event)
         vim.b[bufnr].ninetyfive_accepting = false
     end
 
-    if should_request_completion and event_is_move then
+    local cmp_force_request = vim.g.ninetyfive_cmp_enabled == true
+    local should_trigger_request =
+        (should_request_completion and event_is_move)
+        or (cmp_force_request and (event_is_move or event_is_edit))
+
+    if should_trigger_request then
         suggestion.clear()
         Completion.clear()
         vim.schedule(function()
