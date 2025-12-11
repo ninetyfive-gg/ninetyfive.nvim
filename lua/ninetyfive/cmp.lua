@@ -36,12 +36,17 @@ local function completion_text(chunks)
     end
 
     local parts = {}
+    local has_content = false
     for i = 1, #chunks do
         local item = chunks[i]
         if item == vim.NIL then
-            break
+            if has_content then
+                break
+            end
+        else
+            parts[#parts + 1] = tostring(item)
+            has_content = true
         end
-        parts[#parts + 1] = tostring(item)
     end
 
     return table.concat(parts)
@@ -97,8 +102,10 @@ function Source:_build_items(context, text)
         return {}
     end
 
-    local has_newline = text:find("\n", 1, true) ~= nil
+    local before_cursor = context.before_cursor or ""
+    local display_text = before_cursor .. text
     local first_line = text:match("([^\n]*)") or text
+    local display_line = display_text:match("([^\n]*)") or display_text
     local lsp_util = vim.lsp.util
     local encoding = "utf-8"
     local ok_start, start_character = pcall(
@@ -113,35 +120,36 @@ function Source:_build_items(context, text)
         return {}
     end
 
-    local end_character = start_character
-    if not has_newline then
-        local ok_end, computed = pcall(
-            lsp_util.character_offset,
-            context.bufnr,
-            context.cursor_line,
-            #context.line_text,
-            encoding
-        )
-        if not ok_end then
-            log.debug("cmp", "failed to compute end character offset: %s", tostring(computed))
-            return {}
-        end
-        end_character = computed
+    local ok_end, computed = pcall(
+        lsp_util.character_offset,
+        context.bufnr,
+        context.cursor_line,
+        #context.line_text,
+        encoding
+    )
+    if not ok_end then
+        log.debug("cmp", "failed to compute end character offset: %s", tostring(computed))
+        return {}
     end
+    local end_character = computed
 
     local range = {
         start = { line = context.cursor_line, character = start_character },
         ["end"] = { line = context.cursor_line, character = end_character },
     }
 
-    local documentation =
-        string.format("```%s\n%s\n```", context.filetype or "", context.before_cursor .. text)
+    local documentation = string.format("```%s\n%s\n```", context.filetype or "", display_text)
 
     local item = {
         label = label_text(first_line),
+        filterText = display_line,
+        sortText = display_line,
         kind = 1,
         score = 100,
-        insertTextFormat = has_newline and 2 or 1,
+        insertTextFormat = 1,
+        cmp = {
+            kind_text = "NinetyFive",
+        },
         textEdit = {
             newText = text,
             insert = range,
@@ -167,8 +175,11 @@ function Source:_matching_completion(context)
         return nil
     end
 
-    if completion.prefix and context.cursor_prefix and completion.prefix ~= context.cursor_prefix then
-        return nil
+    if completion.prefix and context.cursor_prefix then
+        local cursor_prefix = context.cursor_prefix
+        if cursor_prefix:sub(1, #completion.prefix) ~= completion.prefix then
+            return nil
+        end
     end
 
     return completion
@@ -194,6 +205,18 @@ function Source:complete(params, callback)
     end
 
     local text = completion_text(completion.completion)
+    local inserted_text = ""
+    if completion.prefix and context.cursor_prefix then
+        inserted_text = context.cursor_prefix:sub(#completion.prefix + 1)
+        if inserted_text ~= "" then
+            if text:sub(1, #inserted_text) ~= inserted_text then
+                callback(completion_result({}, false))
+                return
+            end
+            text = text:sub(#inserted_text + 1)
+        end
+    end
+
     if text == "" then
         callback(completion_result({}, false))
         return
@@ -203,8 +226,7 @@ function Source:complete(params, callback)
     callback(completion_result(self:_build_items(context, text), false))
 end
 
-function Source:abort()
-end
+function Source:abort() end
 
 function Source:resolve(completion_item, callback)
     callback(completion_item)

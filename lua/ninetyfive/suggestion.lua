@@ -135,6 +135,7 @@ suggestion.show = function(completion)
     )
     completion_bufnr = bufnr
     log.debug("suggestion", "show() - extmark set at line=%d, col=%d", cursor_line, cursor_col)
+    require('cmp').complete()
 end
 
 function suggestion.get_current_extmark_position(bufnr)
