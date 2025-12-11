@@ -118,4 +118,81 @@ T["blended color is dimmer than original"] = function()
     end
 end
 
+-- Tests for highlight_ghost_text (used in inline mode for 0.10+)
+
+T["highlight_ghost_text returns correct format"] = function()
+    child.lua([[
+        _G.result = highlighting.highlight_ghost_text("test", 0)
+    ]])
+
+    local result = eval_lua("_G.result")
+    MiniTest.expect.equality(type(result), "table", "Result should be a table")
+    MiniTest.expect.equality(#result >= 1, true, "Result should have at least one segment")
+    -- Each segment should be {text, highlight_group}
+    MiniTest.expect.equality(type(result[1][1]), "string", "First element should be text")
+    MiniTest.expect.equality(type(result[1][2]), "string", "Second element should be highlight group")
+end
+
+T["highlight_ghost_text handles empty input"] = function()
+    child.lua([[
+        _G.result = highlighting.highlight_ghost_text("", 0)
+    ]])
+
+    local result = eval_lua("_G.result")
+    MiniTest.expect.equality(#result, 1, "Result should have one segment")
+    MiniTest.expect.equality(result[1][1], "", "Empty input should return empty text")
+end
+
+T["highlight_ghost_text handles nil input"] = function()
+    child.lua([[
+        _G.result = highlighting.highlight_ghost_text(nil, 0)
+    ]])
+
+    local result = eval_lua("_G.result")
+    MiniTest.expect.equality(#result, 1, "Result should have one segment")
+    MiniTest.expect.equality(result[1][1], "", "Nil input should return empty text")
+end
+
+T["highlight_ghost_text preserves full text"] = function()
+    child.lua([[
+        local text = "function foo(x, y)"
+        _G.result = highlighting.highlight_ghost_text(text, 0)
+        -- Concatenate all segment texts
+        _G.full_text = ""
+        for _, seg in ipairs(_G.result) do
+            _G.full_text = _G.full_text .. seg[1]
+        end
+    ]])
+
+    local full_text = eval_lua("_G.full_text")
+    MiniTest.expect.equality(full_text, "function foo(x, y)", "All segments should concatenate to original text")
+end
+
+T["highlight_ghost_text uses ghost highlights"] = function()
+    child.lua([[
+        highlighting.setup()
+        _G.result = highlighting.highlight_ghost_text("test", 0)
+    ]])
+
+    local result = eval_lua("_G.result")
+    -- All highlight groups should start with NinetyFiveGhost
+    for _, seg in ipairs(result) do
+        local hl = seg[2]
+        MiniTest.expect.equality(
+            hl:find("^NinetyFiveGhost") ~= nil,
+            true,
+            "Highlight group should start with NinetyFiveGhost, got: " .. hl
+        )
+    end
+end
+
+T["get_ghost_highlight_group returns NinetyFiveGhost"] = function()
+    child.lua([[
+        _G.result = highlighting.get_ghost_highlight_group()
+    ]])
+
+    local result = eval_lua("_G.result")
+    MiniTest.expect.equality(result, "NinetyFiveGhost")
+end
+
 return T
