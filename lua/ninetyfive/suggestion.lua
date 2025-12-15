@@ -6,6 +6,7 @@ local highlighting = require("ninetyfive.highlighting")
 local diff = require("ninetyfive.diff")
 
 local completion_id = ""
+local completion_extmark_ids = {} -- Track multiple extmarks for inline mode
 local completion_bufnr = nil
 
 local log = require("ninetyfive.util.log")
@@ -29,6 +30,9 @@ local function trigger_cmp_complete()
     end
 end
 
+-- Check if we can use inline virtual text (Neovim 0.10+)
+local has_inline_virt_text = vim.fn.has("nvim-0.10") == 1
+
 -- Highlight group for text to be deleted (red + strikethrough)
 local function setup_delete_highlight()
     vim.api.nvim_set_hl(0, "NinetyFiveDelete", {
@@ -36,6 +40,22 @@ local function setup_delete_highlight()
         fg = "#ff6666",
         bg = "#3d1f1f",
     })
+end
+
+-- Clear all extmarks in the namespace
+local function clear_all_extmarks(bufnr)
+    if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+        return
+    end
+    -- Clear by ID if we have them
+    if completion_id ~= "" then
+        pcall(vim.api.nvim_buf_del_extmark, bufnr, ninetyfive_ns, 1)
+    end
+    for _, id in ipairs(completion_extmark_ids) do
+        pcall(vim.api.nvim_buf_del_extmark, bufnr, ninetyfive_ns, id)
+    end
+    completion_extmark_ids = {}
+    completion_id = ""
 end
 
 -- Extract match positions and delete text from diff result
@@ -89,9 +109,7 @@ suggestion.show = function(completion)
 
     local bufnr = vim.api.nvim_get_current_buf()
     -- Clear any existing extmarks
-    if bufnr ~= nil and vim.api.nvim_buf_is_valid(bufnr) then
-        vim.api.nvim_buf_del_extmark(bufnr, ninetyfive_ns, 1)
-    end
+    clear_all_extmarks(bufnr)
 
     local cursor_line = vim.fn.line(".") - 1
     local cursor_col = vim.fn.col(".") - 1
@@ -110,53 +128,95 @@ suggestion.show = function(completion)
 
     -- Calculate diff to find matches and deletions
     local diff_result = diff.calculate_diff(first_line_text, buffer_after_cursor, is_complete)
-    local match_positions, delete_text = process_diff_result(diff_result)
 
-    -- Build virtual text for first line with matched portions in normal style
-    local first_line_virt_text = highlighting.highlight_completion_with_matches(first_line_text, bufnr, match_positions)
-
-    -- Append delete text with strikethrough if there's text to delete
-    if delete_text ~= "" and is_complete then
-        setup_delete_highlight()
-        table.insert(first_line_virt_text, { delete_text, "NinetyFiveDelete" })
-    else
-        -- Pad with spaces to cover remaining buffer text (during streaming)
-        local ghost_text_len = vim.fn.strdisplaywidth(first_line_text)
-        local buffer_len = vim.fn.strdisplaywidth(buffer_after_cursor)
-        local padding_needed = buffer_len - ghost_text_len
-        if padding_needed > 0 then
-            table.insert(first_line_virt_text, { string.rep(" ", padding_needed), "Normal" })
-        end
-    end
-
-    -- Handle empty first line
-    if #first_line_virt_text == 0 then
-        first_line_virt_text = { { "", "NinetyFiveGhost" } }
-    end
-
-    -- Build virtual lines for remaining lines
+    -- Build virtual lines for remaining lines (same for both modes)
     local virt_lines = {}
     if #remaining_lines > 0 then
         local remaining_text = table.concat(remaining_lines, "\n")
         virt_lines = highlighting.highlight_completion(remaining_text, bufnr)
     end
 
-    local extmark_opts = {
-        id = 1,
-        virt_text = first_line_virt_text,
-        virt_lines = virt_lines,
-        virt_text_win_col = vim.fn.virtcol(".") - 1,
-        hl_mode = "combine",
-        ephemeral = false,
-    }
+    if has_inline_virt_text then
+        -- Neovim 0.10+: Use inline extmarks for each ghost chunk
+        -- This makes matchparen and other position-based features work correctly
+        for _, edit in ipairs(diff_result.edits) do
+            if edit.type == "ghost" then
+                local col = cursor_col + edit.offset
+                local highlighted_text = highlighting.highlight_ghost_text(edit.text, bufnr)
+                local extmark_id = vim.api.nvim_buf_set_extmark(bufnr, ninetyfive_ns, cursor_line, col, {
+                    virt_text = highlighted_text,
+                    virt_text_pos = "inline",
+                    hl_mode = "combine",
+                })
+                table.insert(completion_extmark_ids, extmark_id)
+            end
+        end
 
-    completion_id = vim.api.nvim_buf_set_extmark(
-        bufnr,
-        ninetyfive_ns,
-        cursor_line,
-        cursor_col,
-        extmark_opts
-    )
+        -- Handle delete text at end of line (use overlay at end)
+        local _, delete_text = process_diff_result(diff_result)
+        if delete_text ~= "" and is_complete then
+            setup_delete_highlight()
+            local end_col = #current_line
+            local extmark_id = vim.api.nvim_buf_set_extmark(bufnr, ninetyfive_ns, cursor_line, end_col, {
+                virt_text = {{ delete_text, "NinetyFiveDelete" }},
+                virt_text_pos = "overlay",
+                hl_mode = "combine",
+            })
+            table.insert(completion_extmark_ids, extmark_id)
+        end
+
+        -- Add virt_lines for multiline completions
+        if #virt_lines > 0 then
+            local extmark_id = vim.api.nvim_buf_set_extmark(bufnr, ninetyfive_ns, cursor_line, cursor_col, {
+                virt_lines = virt_lines,
+            })
+            table.insert(completion_extmark_ids, extmark_id)
+        end
+    else
+        -- Neovim < 0.10: Use overlay mode (original approach)
+
+        local match_positions, delete_text = process_diff_result(diff_result)
+
+        -- Build virtual text for first line with matched portions in normal style
+        local first_line_virt_text = highlighting.highlight_completion_with_matches(first_line_text, bufnr, match_positions)
+
+        -- Append delete text with strikethrough if there's text to delete
+        if delete_text ~= "" and is_complete then
+            setup_delete_highlight()
+            table.insert(first_line_virt_text, { delete_text, "NinetyFiveDelete" })
+        else
+            -- Pad with spaces to cover remaining buffer text (during streaming)
+            local ghost_text_len = vim.fn.strdisplaywidth(first_line_text)
+            local buffer_len = vim.fn.strdisplaywidth(buffer_after_cursor)
+            local padding_needed = buffer_len - ghost_text_len
+            if padding_needed > 0 then
+                table.insert(first_line_virt_text, { string.rep(" ", padding_needed), "Normal" })
+            end
+        end
+
+        -- Handle empty first line
+        if #first_line_virt_text == 0 then
+            first_line_virt_text = { { "", "NinetyFiveGhost" } }
+        end
+
+        local extmark_opts = {
+            id = 1,
+            virt_text = first_line_virt_text,
+            virt_lines = virt_lines,
+            virt_text_win_col = vim.fn.virtcol(".") - 1,
+            hl_mode = "combine",
+            ephemeral = false,
+        }
+
+        completion_id = vim.api.nvim_buf_set_extmark(
+            bufnr,
+            ninetyfive_ns,
+            cursor_line,
+            cursor_col,
+            extmark_opts
+        )
+    end
+
     completion_bufnr = bufnr
     log.debug("suggestion", "show() - extmark set at line=%d, col=%d", cursor_line, cursor_col)
     trigger_cmp_complete()
@@ -165,17 +225,27 @@ end
 function suggestion.get_current_extmark_position(bufnr)
     bufnr = bufnr or completion_bufnr
 
-    if completion_id == "" or not bufnr or bufnr == 0 then
+    if not bufnr or bufnr == 0 then
         return nil
     end
 
-    local mark =
-        vim.api.nvim_buf_get_extmark_by_id(bufnr, ninetyfive_ns, completion_id, { details = false })
-    if not mark or #mark < 2 then
-        return nil
+    -- Check inline mode first (0.10+)
+    if #completion_extmark_ids > 0 then
+        local mark = vim.api.nvim_buf_get_extmark_by_id(bufnr, ninetyfive_ns, completion_extmark_ids[1], { details = false })
+        if mark and #mark >= 2 then
+            return { row = mark[1], col = mark[2] }
+        end
     end
 
-    return { row = mark[1], col = mark[2] }
+    -- Fallback to overlay mode
+    if completion_id ~= "" then
+        local mark = vim.api.nvim_buf_get_extmark_by_id(bufnr, ninetyfive_ns, completion_id, { details = false })
+        if mark and #mark >= 2 then
+            return { row = mark[1], col = mark[2] }
+        end
+    end
+
+    return nil
 end
 
 local function collect_completion_text(completion)
@@ -257,7 +327,8 @@ local function accept_with_selector(selector)
         return
     end
 
-    if completion_id == "" then
+    -- Check if we have any extmarks (either inline mode or overlay mode)
+    if completion_id == "" and #completion_extmark_ids == 0 then
         return
     end
 
@@ -276,7 +347,7 @@ local function accept_with_selector(selector)
         return
     end
 
-    vim.api.nvim_buf_del_extmark(bufnr, ninetyfive_ns, 1)
+    clear_all_extmarks(bufnr)
 
     local line = vim.fn.line(".") - 1
     local col = vim.fn.col(".") - 1
@@ -352,10 +423,7 @@ end
 
 suggestion.clear = function()
     local buffer = vim.api.nvim_get_current_buf()
-    if buffer ~= nil and vim.api.nvim_buf_is_valid(buffer) then
-        vim.api.nvim_buf_del_extmark(buffer, ninetyfive_ns, 1)
-    end
-    completion_id = ""
+    clear_all_extmarks(buffer)
     completion_bufnr = nil
 end
 

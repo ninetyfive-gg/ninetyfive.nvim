@@ -9,8 +9,8 @@ local delta = require("ninetyfive.delta")
 local Communication = {}
 Communication.__index = Communication
 
--- Track last known file content per buffer for delta calculation
-local buffer_texts = {}
+local active_bufnr = nil
+local active_content = nil
 
 local function repo_name_from_path(path)
     if not path or path == "" then
@@ -279,8 +279,8 @@ function Communication:send_file_content(opts)
                 if not websocket.send_message(message) then
                     log.debug("comm", "failed to send file-content for %s", bufname)
                 else
-                    -- Track content for future delta calculations
-                    buffer_texts[bufnr] = content
+                    active_bufnr = bufnr
+                    active_content = content
                 end
             end)
         end)
@@ -302,10 +302,8 @@ function Communication:send_file_delta(opts)
     end
 
     local new_content = buffer_content(bufnr)
-    local old_content = buffer_texts[bufnr]
 
-    -- If we don't have previous content, send full file-content synchronously
-    if not old_content then
+    if active_bufnr ~= bufnr then
         local bufname = vim.api.nvim_buf_get_name(bufnr)
         local path = bufname ~= "" and relative_path(bufname) or string.format("Untitled-%d", bufnr)
 
@@ -328,16 +326,16 @@ function Communication:send_file_delta(opts)
             return false, "send_error"
         end
 
-        buffer_texts[bufnr] = new_content
+        active_bufnr = bufnr
+        active_content = new_content
         return true
     end
 
-    -- If content hasn't changed, nothing to do
-    if old_content == new_content then
+    if active_content == new_content then
         return true
     end
 
-    local start, end_pos, insert_text = delta.compute_delta(old_content, new_content)
+    local start, end_pos, insert_text = delta.compute_delta(active_content, new_content)
 
     local payload = {
         type = "file-delta",
@@ -359,8 +357,7 @@ function Communication:send_file_delta(opts)
         return false, "send_error"
     end
 
-    -- Update tracked content
-    buffer_texts[bufnr] = new_content
+    active_content = new_content
     return true
 end
 
@@ -455,8 +452,8 @@ function Communication:resync_all_buffers()
         return
     end
 
-    -- Clear tracked content so we send full file content
-    buffer_texts = {}
+    active_bufnr = nil
+    active_content = nil
 
     local buffers = vim.api.nvim_list_bufs()
     for _, bufnr in ipairs(buffers) do

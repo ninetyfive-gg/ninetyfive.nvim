@@ -69,3 +69,10 @@ else
         end
     end, { desc = "Open the purchase site on your browser" })
 end
+
+-- Auto-setup with defaults if user hasn't called setup()
+vim.defer_fn(function()
+    if not _G.Ninetyfive or not _G.Ninetyfive.config then
+        require("ninetyfive").setup()
+    end
+end, 0)
