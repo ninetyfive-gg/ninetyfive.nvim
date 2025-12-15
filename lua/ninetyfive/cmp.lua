@@ -52,6 +52,18 @@ local function completion_text(chunks)
     return table.concat(parts)
 end
 
+local function has_flush_marker(chunks)
+    if type(chunks) ~= "table" then
+        return false
+    end
+    for i = 1, #chunks do
+        if chunks[i] == vim.NIL then
+            return true
+        end
+    end
+    return false
+end
+
 function Source.new(opts)
     local self = setmetatable({}, Source)
     self.opts = opts or {}
@@ -119,30 +131,16 @@ function Source:_build_items(context, text)
         return {}
     end
 
-    local ok_end, computed = pcall(
-        lsp_util.character_offset,
-        context.bufnr,
-        context.cursor_line,
-        #context.line_text,
-        encoding
-    )
-    if not ok_end then
-        log.debug("cmp", "failed to compute end character offset: %s", tostring(computed))
-        return {}
-    end
-    local end_character = computed
-
     local range = {
         start = { line = context.cursor_line, character = start_character },
-        ["end"] = { line = context.cursor_line, character = end_character },
+        ["end"] = { line = context.cursor_line, character = vim.fn.col("$") },
     }
 
     local documentation = string.format("```%s\n%s\n```", context.filetype or "", display_text)
 
     local item = {
         label = label_text(display_line),
-        filterText = display_line,
-        sortText = display_line,
+        filterText = null,
         kind = 1,
         score = 100,
         insertTextFormat = 1,
@@ -199,6 +197,11 @@ function Source:complete(params, callback)
 
     local completion = self:_matching_completion(context)
     if not completion then
+        callback(completion_result({}, false))
+        return
+    end
+
+    if not completion.completion or not has_flush_marker(completion.completion) then
         callback(completion_result({}, false))
         return
     end
