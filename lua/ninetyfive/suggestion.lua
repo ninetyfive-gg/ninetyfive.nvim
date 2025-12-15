@@ -103,7 +103,9 @@ suggestion.show = function(completion)
     local text = table.concat(parts)
     log.debug("suggestion", "show() - text: %q, is_complete: %s", text, tostring(is_complete))
     if cmp_mode then
-        trigger_cmp_complete()
+        if is_complete then
+            trigger_cmp_complete()
+        end
         return
     end
 
@@ -123,7 +125,8 @@ suggestion.show = function(completion)
     end
 
     -- Get text after cursor to calculate padding and matches
-    local current_line = vim.api.nvim_buf_get_lines(bufnr, cursor_line, cursor_line + 1, false)[1] or ""
+    local current_line = vim.api.nvim_buf_get_lines(bufnr, cursor_line, cursor_line + 1, false)[1]
+        or ""
     local buffer_after_cursor = current_line:sub(cursor_col + 1)
 
     -- Calculate diff to find matches and deletions
@@ -143,11 +146,12 @@ suggestion.show = function(completion)
             if edit.type == "ghost" then
                 local col = cursor_col + edit.offset
                 local highlighted_text = highlighting.highlight_ghost_text(edit.text, bufnr)
-                local extmark_id = vim.api.nvim_buf_set_extmark(bufnr, ninetyfive_ns, cursor_line, col, {
-                    virt_text = highlighted_text,
-                    virt_text_pos = "inline",
-                    hl_mode = "combine",
-                })
+                local extmark_id =
+                    vim.api.nvim_buf_set_extmark(bufnr, ninetyfive_ns, cursor_line, col, {
+                        virt_text = highlighted_text,
+                        virt_text_pos = "inline",
+                        hl_mode = "combine",
+                    })
                 table.insert(completion_extmark_ids, extmark_id)
             end
         end
@@ -157,19 +161,21 @@ suggestion.show = function(completion)
         if delete_text ~= "" and is_complete then
             setup_delete_highlight()
             local end_col = #current_line
-            local extmark_id = vim.api.nvim_buf_set_extmark(bufnr, ninetyfive_ns, cursor_line, end_col, {
-                virt_text = {{ delete_text, "NinetyFiveDelete" }},
-                virt_text_pos = "overlay",
-                hl_mode = "combine",
-            })
+            local extmark_id =
+                vim.api.nvim_buf_set_extmark(bufnr, ninetyfive_ns, cursor_line, end_col, {
+                    virt_text = { { delete_text, "NinetyFiveDelete" } },
+                    virt_text_pos = "overlay",
+                    hl_mode = "combine",
+                })
             table.insert(completion_extmark_ids, extmark_id)
         end
 
         -- Add virt_lines for multiline completions
         if #virt_lines > 0 then
-            local extmark_id = vim.api.nvim_buf_set_extmark(bufnr, ninetyfive_ns, cursor_line, cursor_col, {
-                virt_lines = virt_lines,
-            })
+            local extmark_id =
+                vim.api.nvim_buf_set_extmark(bufnr, ninetyfive_ns, cursor_line, cursor_col, {
+                    virt_lines = virt_lines,
+                })
             table.insert(completion_extmark_ids, extmark_id)
         end
     else
@@ -178,7 +184,8 @@ suggestion.show = function(completion)
         local match_positions, delete_text = process_diff_result(diff_result)
 
         -- Build virtual text for first line with matched portions in normal style
-        local first_line_virt_text = highlighting.highlight_completion_with_matches(first_line_text, bufnr, match_positions)
+        local first_line_virt_text =
+            highlighting.highlight_completion_with_matches(first_line_text, bufnr, match_positions)
 
         -- Append delete text with strikethrough if there's text to delete
         if delete_text ~= "" and is_complete then
@@ -219,7 +226,6 @@ suggestion.show = function(completion)
 
     completion_bufnr = bufnr
     log.debug("suggestion", "show() - extmark set at line=%d, col=%d", cursor_line, cursor_col)
-    trigger_cmp_complete()
 end
 
 function suggestion.get_current_extmark_position(bufnr)
@@ -231,7 +237,12 @@ function suggestion.get_current_extmark_position(bufnr)
 
     -- Check inline mode first (0.10+)
     if #completion_extmark_ids > 0 then
-        local mark = vim.api.nvim_buf_get_extmark_by_id(bufnr, ninetyfive_ns, completion_extmark_ids[1], { details = false })
+        local mark = vim.api.nvim_buf_get_extmark_by_id(
+            bufnr,
+            ninetyfive_ns,
+            completion_extmark_ids[1],
+            { details = false }
+        )
         if mark and #mark >= 2 then
             return { row = mark[1], col = mark[2] }
         end
@@ -239,7 +250,12 @@ function suggestion.get_current_extmark_position(bufnr)
 
     -- Fallback to overlay mode
     if completion_id ~= "" then
-        local mark = vim.api.nvim_buf_get_extmark_by_id(bufnr, ninetyfive_ns, completion_id, { details = false })
+        local mark = vim.api.nvim_buf_get_extmark_by_id(
+            bufnr,
+            ninetyfive_ns,
+            completion_id,
+            { details = false }
+        )
         if mark and #mark >= 2 then
             return { row = mark[1], col = mark[2] }
         end
