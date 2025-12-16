@@ -171,6 +171,11 @@ function Communication:_send_workspace(payload)
     end
 
     vim.schedule(function()
+        -- Check connection is still valid before sending
+        if not websocket.is_connected() then
+            log.debug("comm", "skipping set-workspace - websocket not connected")
+            return
+        end
         if not websocket.send_message(message) then
             log.debug("comm", "failed to send set-workspace message")
         end

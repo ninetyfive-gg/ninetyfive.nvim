@@ -231,6 +231,38 @@ function Ninetyfive.reject()
     suggestion.clear()
 end
 
+--- Returns the current status text for display (e.g., in lualine)
+--- Returns subscription name if connected, "NinetyFive Disconnected" otherwise
+---@return string
+function Ninetyfive.get_status()
+    if not websocket.is_connected() then
+        return "NinetyFive Disconnected"
+    end
+
+    local sub_info = websocket.get_subscription_info()
+    if sub_info and sub_info.name then
+        return sub_info.name
+    end
+
+    return "NinetyFive"
+end
+
+--- Returns the color for the current status (for lualine)
+--- Returns nil for paid users (use default), red for disconnected, yellow for unpaid
+---@return table|nil
+function Ninetyfive.get_status_color()
+    if not websocket.is_connected() then
+        return { fg = "#e06c75" } -- red for disconnected
+    end
+
+    local sub_info = websocket.get_subscription_info()
+    if sub_info and sub_info.is_paid then
+        return nil -- no color override for paid users
+    end
+
+    return { fg = "#e5c07b" } -- yellow for unpaid/unknown
+end
+
 _G.Ninetyfive = Ninetyfive
 
 return _G.Ninetyfive

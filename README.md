@@ -219,6 +219,36 @@ _Note_: all NinetyFive cache is stored at `~/.ninetyfive/`
 | `:NinetyFivePurchase` | Redirects to the purchase page               |
 | `:NinetyFiveKey`      | Provide an API key                           |
 
+## Lualine Integration
+
+NinetyFive provides a [lualine](https://github.com/nvim-lualine/lualine.nvim) component:
+
+```lua
+require("lualine").setup({
+  sections = {
+    lualine_x = { "ninetyfive" },
+  },
+})
+```
+
+The status shows your subscription name when connected, or "NinetyFive Disconnected" when offline. Colors indicate connection state (red = disconnected, yellow = free tier).
+
+Options:
+
+```lua
+lualine_x = {
+  {
+    "ninetyfive",
+    short = false,       -- use "95" instead of full status text
+    show_colors = true,
+    colors = {
+      disconnected = "#e06c75",
+      unpaid = "#e5c07b",
+    },
+  },
+}
+```
+
 ## Development
 
 ```bash
