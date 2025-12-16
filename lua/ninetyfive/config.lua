@@ -115,13 +115,10 @@ function Ninetyfive.setup(options)
     })
 
     local ok, cmp = pcall(require, "cmp")
-    if not ok then
-        return
+    if ok then
+        local Source = require("ninetyfive.cmp")
+        cmp.register_source("ninetyfive", Source.new())
     end
-
-    local Source = require("ninetyfive.cmp")
-
-    cmp.register_source("ninetyfive", Source.new())
 
     return Ninetyfive.options
 end
