@@ -1,8 +1,19 @@
 local log = require("ninetyfive.util.log")
 local Completion = require("ninetyfive.completion")
 local util = require("ninetyfive.util")
+local config = require("ninetyfive.config")
 
-vim.g.ninetyfive_cmp_enabled = true
+local function current_config()
+    if _G.Ninetyfive and _G.Ninetyfive.config then
+        return _G.Ninetyfive.config
+    end
+    return config.options or {}
+end
+
+local function is_cmp_enabled()
+    local cfg = current_config()
+    return cfg.use_cmp == true
+end
 
 local Source = {}
 Source.__index = Source
@@ -79,7 +90,7 @@ function Source:get_keyword_pattern()
 end
 
 function Source:is_available()
-    return vim ~= nil and vim.fn ~= nil and vim.g.ninetyfive_cmp_enabled ~= false
+    return vim ~= nil and vim.fn ~= nil and is_cmp_enabled()
 end
 
 function Source:_prepare_context(params)
