@@ -118,22 +118,25 @@ function Source:_build_items(context, text)
     local display_text = before_cursor .. text
     local display_line = display_text:match("([^\n]*)") or display_text
     local lsp_util = vim.lsp.util
+    local line_text = context.line_text or ""
     local encoding = "utf-8"
-    local ok_start, start_character = pcall(
-        lsp_util.character_offset,
-        context.bufnr,
-        context.cursor_line,
-        context.cursor_col,
-        encoding
-    )
+    local ok_start, start_character =
+        pcall(lsp_util.character_offset, context.bufnr, context.cursor_line, 0, encoding)
     if not ok_start then
         log.debug("cmp", "failed to compute start character offset: %s", tostring(start_character))
         return {}
     end
 
+    local ok_end, end_character =
+        pcall(lsp_util.character_offset, context.bufnr, context.cursor_line, #line_text, encoding)
+    if not ok_end then
+        log.debug("cmp", "failed to compute end character offset: %s", tostring(end_character))
+        return {}
+    end
+
     local range = {
         start = { line = context.cursor_line, character = start_character },
-        ["end"] = { line = context.cursor_line, character = vim.fn.col("$") },
+        ["end"] = { line = context.cursor_line, character = end_character },
     }
 
     local documentation = string.format("```%s\n%s\n```", context.filetype or "", display_text)
@@ -148,7 +151,7 @@ function Source:_build_items(context, text)
             kind_text = "NinetyFive",
         },
         textEdit = {
-            newText = text,
+            newText = display_line,
             insert = range,
             replace = range,
         },
