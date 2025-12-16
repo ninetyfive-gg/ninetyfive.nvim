@@ -15,6 +15,8 @@ Ninetyfive.options = {
     enable_on_startup = true,
     -- Update server URI, mostly for debugging
     server = "wss://api.ninetyfive.gg",
+    -- When true, indicates Ninetyfive is used exclusively as a cmp source
+    use_cmp = false,
     mappings = {
         -- When `true`, creates all the mappings set
         enabled = true,
@@ -111,6 +113,12 @@ function Ninetyfive.setup(options)
         accept_line = "<Cmd>NinetyFiveAcceptLine<CR>",
         reject = "<Cmd>NinetyFiveReject<CR>",
     })
+
+    local ok, cmp = pcall(require, "cmp")
+    if ok then
+        local Source = require("ninetyfive.cmp")
+        cmp.register_source("ninetyfive", Source.new())
+    end
 
     return Ninetyfive.options
 end
