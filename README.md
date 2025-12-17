@@ -214,26 +214,6 @@ return {
 
 _Note_: all NinetyFive cache is stored at `~/.ninetyfive/`
 
-
-#### Using NinetyFive as a `nvim-cmp` source
-
-Add NinetyFive as a source to your cmp config:
-
-```lua
-cmp.setup({
-    sources = cmp.config.sources({
-      { name = "ninetyfive" },
-    }),
-})
-```
-
-Additionally, you can disable inline suggestions in NinetyFive's setup:
-```lua
-require("ninetyfive").setup({
-    use_cmp = true
-})
-```
-
 ## Commands
 
 | Command               | Description                                  |
@@ -270,6 +250,25 @@ lualine_x = {
     },
   },
 }
+```
+
+#### Nvim-cmp Integration
+
+NinetyFive provides a [nvim-cmp](https://github.com/hrsh7th/nvim-cmp) source:
+
+```lua
+cmp.setup({
+    sources = cmp.config.sources({
+      { name = "ninetyfive" },
+    }),
+})
+```
+
+Additionally, you can disable inline suggestions in NinetyFive's setup:
+```lua
+require("ninetyfive").setup({
+    use_cmp = true
+})
 ```
 
 ## Development
