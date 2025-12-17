@@ -1,5 +1,6 @@
 local lualine_require = require("lualine_require")
 local M = lualine_require.require("lualine.component"):extend()
+local highlight = require("lualine.highlight")
 
 local default_options = {
     short = false,
@@ -16,8 +17,16 @@ function M:init(options)
 
     if self.options.show_colors then
         self.highlight_groups = {
-            disconnected = self:create_hl({ bg = self.options.colors.disconnected, fg = "#ffffff" }, "disconnected"),
-            unpaid = self:create_hl({ bg = self.options.colors.unpaid, fg = "#ffffff" }, "unpaid"),
+            disconnected = highlight.create_component_highlight_group(
+                { bg = self.options.colors.disconnected, fg = "#ffffff" },
+                "disconnected",
+                self.options
+            ),
+            unpaid = highlight.create_component_highlight_group(
+                { bg = self.options.colors.unpaid, fg = "#ffffff" },
+                "unpaid",
+                self.options
+            ),
         }
     end
 end
@@ -48,9 +57,8 @@ function M:update_status()
     end
 
     if hl_group then
-        return self:format_hl(hl_group) .. status_text .. self:get_default_hl()
+        return highlight.component_format_highlight(hl_group) .. status_text
     end
-
     return status_text
 end
 
