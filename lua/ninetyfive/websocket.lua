@@ -23,6 +23,9 @@ local connection_params = {
 -- Callbacks to run after successful reconnection
 local on_reconnect_callbacks = {}
 
+-- Store subscription info from server
+local subscription_info = nil
+
 function Websocket.on_reconnect(callback)
     table.insert(on_reconnect_callbacks, callback)
 end
@@ -49,7 +52,12 @@ function Websocket.send_message(message)
 
     log.debug("websocket", "-> sending: %s", message)
 
-    local result = vim.fn.chansend(_G.Ninetyfive.websocket_job, message .. "\n")
+    -- Use pcall to handle race condition where channel closes between check and send
+    local ok, result = pcall(vim.fn.chansend, _G.Ninetyfive.websocket_job, message .. "\n")
+    if not ok then
+        log.debug("websocket", "channel closed while sending: %s", tostring(result))
+        return false
+    end
     return result > 0
 end
 
@@ -276,6 +284,10 @@ function Websocket.setup_connection(server_uri, user_id, api_key)
 
                     if msg_type == "subscription-info" then
                         log.debug("messages", "<- [subscription-info]", parsed)
+                        subscription_info = {
+                            is_paid = parsed.isPaid,
+                            name = parsed.name,
+                        }
                     elseif msg_type == "get-commit" then
                         local commit = git.get_commit(parsed.commitHash)
                         if commit then
@@ -351,16 +363,7 @@ function Websocket.setup_connection(server_uri, user_id, api_key)
             _G.Ninetyfive.websocket_job = nil
 
             -- 143 = SIGTERM (normal shutdown), 0 = normal exit
-            if exit_code ~= 0 and exit_code ~= 143 then
-                log.notify(
-                    "websocket",
-                    vim.log.levels.WARN,
-                    true,
-                    "websocket disconnected (code: " .. tostring(exit_code) .. ")"
-                )
-            else
-                log.debug("websocket", "websocket job exiting with code: " .. tostring(exit_code))
-            end
+            log.debug("websocket", "websocket job exiting with code: " .. tostring(exit_code))
 
             -- Attempt reconnection if not intentional shutdown
             if not is_intentional_shutdown and connection_params.server_uri then
@@ -376,7 +379,7 @@ function Websocket.setup_connection(server_uri, user_id, api_key)
                         connection_params.api_key
                     )
                     if success then
-                        log.notify("websocket", vim.log.levels.INFO, false, "Reconnected")
+                        log.debug("websocket", "Reconnected")
                         vim.defer_fn(run_reconnect_callbacks, 500)
                     end
                 end, reconnect_delay)
@@ -403,6 +406,18 @@ function Websocket.get_completion()
     end
 
     return c.completion
+end
+
+function Websocket.get_subscription_info()
+    return subscription_info
+end
+
+function Websocket.is_connected()
+    return _G.Ninetyfive and _G.Ninetyfive.websocket_job and _G.Ninetyfive.websocket_job > 0
+end
+
+function Websocket.clear_subscription_info()
+    subscription_info = nil
 end
 
 return Websocket
