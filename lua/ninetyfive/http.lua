@@ -25,7 +25,7 @@ if ok_ffi then
         "curl",
     }
 
-    ffi.cdef([[
+    pcall(ffi.cdef, [[
     typedef void CURL;
     typedef void CURLM;
     typedef void CURLSH;
