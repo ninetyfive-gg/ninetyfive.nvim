@@ -5,6 +5,7 @@ local suggestion = require("ninetyfive.suggestion")
 local Completion = require("ninetyfive.completion")
 local Communication = require("ninetyfive.communication")
 local util = require("ninetyfive.util")
+local websocket = require("ninetyfive.websocket")
 
 local CommunicationAutocmds = {}
 CommunicationAutocmds.__index = CommunicationAutocmds
@@ -61,7 +62,12 @@ local function consume_chars(array, count)
 end
 
 local function trim_completion_chunks(chunks, remove_count)
-    log.debug("autocmds", "trim_completion_chunks: remove_count=%d, chunks=%d", remove_count, #chunks)
+    log.debug(
+        "autocmds",
+        "trim_completion_chunks: remove_count=%d, chunks=%d",
+        remove_count,
+        #chunks
+    )
     log.debug("autocmds", "trim_completion_chunks: before=%q", completion_as_text(chunks))
 
     local remaining = remove_count
@@ -115,6 +121,43 @@ function CommunicationAutocmds:clear()
         pcall(vim.api.nvim_del_augroup_by_id, self.group_id)
         self.group_id = nil
     end
+end
+
+function CommunicationAutocmds:_send_accept_message(request_id, count)
+    if
+        not request_id
+        or not count
+        or count <= 0
+        or not self.communication
+        or not self.communication:is_websocket()
+    then
+        return
+    end
+
+    vim.schedule(function()
+        if not websocket.is_connected() then
+            return
+        end
+
+        local payload = {
+            type = "accept-completion",
+            requestId = request_id,
+            count = count,
+        }
+        local ok, message = pcall(vim.json.encode, payload)
+        if not ok then
+            log.debug(
+                "autocmds",
+                "failed to encode accept-completion payload: %s",
+                tostring(message)
+            )
+            return
+        end
+
+        if not websocket.send_message(message) then
+            log.debug("autocmds", "failed to send accept-completion message")
+        end
+    end)
 end
 
 function CommunicationAutocmds:reconcile(args, event)
@@ -179,7 +222,12 @@ function CommunicationAutocmds:reconcile(args, event)
             end
 
             new_completion = consume_chars(completion.completion, consume_count)
-            if opts and opts.append_newline_when_complete and #new_completion > 0 and consumed_entire_completion then
+            if
+                opts
+                and opts.append_newline_when_complete
+                and #new_completion > 0
+                and consumed_entire_completion
+            then
                 table.insert(new_completion, 1, "\n")
             end
         end
@@ -195,24 +243,33 @@ function CommunicationAutocmds:reconcile(args, event)
             clear_completion_state()
         end
 
-        return true, has_remaining
+        return true, has_remaining, accepted_length
     end
 
     if is_accepting and event_is_move then
         should_request_completion = not completion_ready() or #completion.completion == 0
         vim.b[bufnr].ninetyfive_accepting = false
     elseif is_accepting and event_is_edit then
-        local consumed, has_remaining = consume_current_completion({ strategy = "trim", clear_on_mismatch = true })
+        local request_id = completion and completion.request_id
+        local consumed, has_remaining, accepted_length =
+            consume_current_completion({ strategy = "trim", clear_on_mismatch = true })
         if consumed then
+            if request_id and accepted_length and accepted_length > 0 then
+                self:_send_accept_message(request_id, accepted_length)
+            end
             should_request_completion = not has_remaining
         end
     elseif (event_is_edit or event_is_move) and completion_ready() then
-        local consumed, has_remaining = consume_current_completion({
+        local request_id = completion and completion.request_id
+        local consumed, has_remaining, accepted_length = consume_current_completion({
             consume_extra_when_complete = true,
             append_newline_when_complete = true,
             clear_on_mismatch = true,
         })
         if consumed then
+            if event_is_edit and request_id and accepted_length and accepted_length > 0 then
+                self:_send_accept_message(request_id, accepted_length)
+            end
             should_request_completion = not has_remaining
         end
     end
