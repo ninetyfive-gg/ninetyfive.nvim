@@ -142,18 +142,28 @@ local function get_ts_lang(bufnr)
     return lang
 end
 
+local TS_CONTEXT_LINES = 32
+
 -- Get buffer context (prefix before cursor, suffix after cursor)
+-- Limited to TS_CONTEXT_LINES to avoid blocking on large files
 local function get_buffer_context(bufnr)
     local cursor = vim.api.nvim_win_get_cursor(0)
-    local lines_before = vim.api.nvim_buf_get_lines(bufnr, 0, cursor[1], false)
+    local cursor_line = cursor[1]
+    local cursor_col = cursor[2]
+
+    -- Limit prefix to TS_CONTEXT_LINES before cursor
+    local start_line = math.max(0, cursor_line - TS_CONTEXT_LINES)
+    local lines_before = vim.api.nvim_buf_get_lines(bufnr, start_line, cursor_line, false)
     if #lines_before > 0 then
-        lines_before[#lines_before] = lines_before[#lines_before]:sub(1, cursor[2])
+        lines_before[#lines_before] = lines_before[#lines_before]:sub(1, cursor_col)
     end
     local prefix = table.concat(lines_before, "\n")
 
-    local lines_after = vim.api.nvim_buf_get_lines(bufnr, cursor[1] - 1, -1, false)
+    -- Limit suffix to TS_CONTEXT_LINES after cursor
+    local end_line = cursor_line - 1 + TS_CONTEXT_LINES
+    local lines_after = vim.api.nvim_buf_get_lines(bufnr, cursor_line - 1, end_line, false)
     if #lines_after > 0 then
-        lines_after[1] = lines_after[1]:sub(cursor[2] + 1)
+        lines_after[1] = lines_after[1]:sub(cursor_col + 1)
     end
     local suffix = table.concat(lines_after, "\n")
 
@@ -246,21 +256,8 @@ function M.highlight_completion(completion_text, bufnr)
         return make_fallback_result(completion_text)
     end
 
-    -- Get buffer content up to cursor
-    local cursor = vim.api.nvim_win_get_cursor(0)
-    local lines_before = vim.api.nvim_buf_get_lines(bufnr, 0, cursor[1], false)
-    if #lines_before > 0 then
-        lines_before[#lines_before] = lines_before[#lines_before]:sub(1, cursor[2])
-    end
-    local prefix = table.concat(lines_before, "\n")
+    local prefix, suffix = get_buffer_context(bufnr)
     local prefix_len = #prefix
-
-    -- Get buffer content after cursor (suffix) for proper context
-    local lines_after = vim.api.nvim_buf_get_lines(bufnr, cursor[1] - 1, -1, false)
-    if #lines_after > 0 then
-        lines_after[1] = lines_after[1]:sub(cursor[2] + 1)
-    end
-    local suffix = table.concat(lines_after, "\n")
 
     local full_text = prefix .. completion_text .. suffix
 
@@ -363,21 +360,8 @@ function M.highlight_completion_with_matches(completion_text, bufnr, match_posit
     -- Build character highlights using treesitter if available
     local char_highlights = {}
     if lang then
-        local cursor = vim.api.nvim_win_get_cursor(0)
-        local lines_before = vim.api.nvim_buf_get_lines(bufnr, 0, cursor[1], false)
-        if #lines_before > 0 then
-            lines_before[#lines_before] = lines_before[#lines_before]:sub(1, cursor[2])
-        end
-        local prefix = table.concat(lines_before, "\n")
+        local prefix, suffix = get_buffer_context(bufnr)
         local prefix_len = #prefix
-
-        -- Get buffer content after cursor (suffix) for proper context
-        local lines_after = vim.api.nvim_buf_get_lines(bufnr, cursor[1] - 1, -1, false)
-        if #lines_after > 0 then
-            lines_after[1] = lines_after[1]:sub(cursor[2] + 1)
-        end
-        local suffix = table.concat(lines_after, "\n")
-
         local full_text = prefix .. completion_text .. suffix
 
         local ok, parser = pcall(vim.treesitter.get_string_parser, full_text, lang)
