@@ -227,8 +227,35 @@ function Ninetyfive.accept_line()
 end
 
 function Ninetyfive.reject()
-    Completion.clear() -- right?
+    local completion = Completion.get()
+    local request_id = completion and completion.request_id or nil
+
+    Completion.clear()
     suggestion.clear()
+
+    if not request_id or not communication:is_websocket() then
+        return
+    end
+
+    vim.schedule(function()
+        if not websocket.is_connected() then
+            return
+        end
+
+        local payload = {
+            type = "reject-completion",
+            requestId = request_id,
+        }
+        local ok, message = pcall(vim.json.encode, payload)
+        if not ok then
+            log.debug("init", "failed to encode reject-completion payload: %s", tostring(message))
+            return
+        end
+
+        if not websocket.send_message(message) then
+            log.debug("init", "failed to send reject-completion message")
+        end
+    end)
 end
 
 --- Returns the current status text for display (e.g., in lualine)
