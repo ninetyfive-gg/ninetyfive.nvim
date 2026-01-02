@@ -278,7 +278,7 @@ function CommunicationAutocmds:reconcile(args, event)
         vim.b[bufnr].ninetyfive_accepting = false
     end
 
-    if should_request_completion and event_is_move then
+    if should_request_completion and not event_is_move then
         suggestion.clear()
         Completion.clear()
         vim.schedule(function()
