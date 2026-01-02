@@ -22,6 +22,22 @@ sets Ninetyfive with the provided API Key
 Parameters ~
 {api_key} `(string)`: the api key you want to use.
 
+------------------------------------------------------------------------------
+                                                       *Ninetyfive.get_status()*
+                           `Ninetyfive.get_status`()
+Returns the current status text for display (e.g., in lualine)
+Returns subscription name if connected, "NinetyFive Disconnected" otherwise
+Return ~
+`(string)`
+
+------------------------------------------------------------------------------
+                                                 *Ninetyfive.get_status_color()*
+                        `Ninetyfive.get_status_color`()
+Returns the color for the current status (for lualine)
+Returns nil for paid users (use default), red for disconnected, yellow for unpaid
+Return ~
+`(table|nil)`
+
 
 ==============================================================================
 ------------------------------------------------------------------------------
@@ -40,9 +56,9 @@ Default values:
       enable_on_startup = true,
       -- Update server URI, mostly for debugging
       server = "wss://api.ninetyfive.gg",
+      -- When true, indicates Ninetyfive is used exclusively as a cmp source
+      use_cmp = false,
       mappings = {
-          -- When `true`, creates all the mappings set
-          enabled = true,
           -- Sets a global mapping to accept a suggestion
           accept = "<Tab>",
           -- Mapping to accept the next word
@@ -72,6 +88,82 @@ Parameters ~
 
 Usage ~
 `require("ninetyfive").setup()` (add `{}` with your |Ninetyfive.options| table)
+
+
+==============================================================================
+------------------------------------------------------------------------------
+                                                             *M.compute_delta()*
+                   `M.compute_delta`({old_text}, {new_text})
+the minimal delta between old_text and new_text.
+start (byte offset), end (byte offset in old text), and the new text to insert.
+Parameters ~
+{old_text} `(string)`
+{new_text} `(string)`
+Return ~
+`(number)` start byte offset where change begins
+Return ~
+`(number)` end_pos byte offset in old_text where change ends
+Return ~
+`(string)` insert_text the text to insert at start
+
+
+==============================================================================
+------------------------------------------------------------------------------
+Class ~
+{DiffEdit}
+Fields ~
+{type} "`(ghost)`" | "delete" | "match"
+{offset} `(number)` Position in buffer (0-indexed from cursor)
+{text} `(string)` The text content
+
+------------------------------------------------------------------------------
+Class ~
+{DiffResult}
+Fields ~
+{edits} `(DiffEdit[])`
+
+------------------------------------------------------------------------------
+                                                            *M.calculate_diff()*
+           `M.calculate_diff`({completion}, {buffer}, {is_complete})
+matching algorithm for calculating diff between completion and buffer.
+
+each character in buffer, finds its next occurrence in completion.
+in completion become ghost text edits. Matched characters are preserved.
+
+Parameters ~
+{completion} `(string)` The completion text (first line only)
+{buffer} `(string)` The text after cursor on current line
+{is_complete} `(boolean)` If true, mark leftover buffer for deletion
+Return ~
+`(DiffResult)`
+
+------------------------------------------------------------------------------
+                                                               *M.merge_edits()*
+                            `M.merge_edits`({edits})
+consecutive edits of the same type at the same effective position.
+simplifies the edit list for rendering.
+Parameters ~
+{edits} `(DiffEdit[])`
+Return ~
+`(DiffEdit[])`
+
+------------------------------------------------------------------------------
+                                                            *M.get_ghost_text()*
+                          `M.get_ghost_text`({result})
+only ghost text edits, merged together.
+Parameters ~
+{result} `(DiffResult)`
+Return ~
+`(string)` The combined ghost text
+
+------------------------------------------------------------------------------
+                                                             *M.has_deletions()*
+                          `M.has_deletions`({result})
+if the diff result has any delete markers.
+Parameters ~
+{result} `(DiffResult)`
+Return ~
+`(boolean)`
 
 
 ==============================================================================

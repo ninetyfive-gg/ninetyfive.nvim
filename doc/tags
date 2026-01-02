@@ -1,6 +1,13 @@
+M.calculate_diff()	ninetyfive.txt	/*M.calculate_diff()*
+M.compute_delta()	ninetyfive.txt	/*M.compute_delta()*
+M.get_ghost_text()	ninetyfive.txt	/*M.get_ghost_text()*
+M.has_deletions()	ninetyfive.txt	/*M.has_deletions()*
+M.merge_edits()	ninetyfive.txt	/*M.merge_edits()*
 M.post_json()	ninetyfive.txt	/*M.post_json()*
 Ninetyfive.disable()	ninetyfive.txt	/*Ninetyfive.disable()*
 Ninetyfive.enable()	ninetyfive.txt	/*Ninetyfive.enable()*
+Ninetyfive.get_status()	ninetyfive.txt	/*Ninetyfive.get_status()*
+Ninetyfive.get_status_color()	ninetyfive.txt	/*Ninetyfive.get_status_color()*
 Ninetyfive.options	ninetyfive.txt	/*Ninetyfive.options*
 Ninetyfive.setApiKey()	ninetyfive.txt	/*Ninetyfive.setApiKey()*
 Ninetyfive.setup()	ninetyfive.txt	/*Ninetyfive.setup()*
