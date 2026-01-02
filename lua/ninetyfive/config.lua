@@ -18,8 +18,6 @@ Ninetyfive.options = {
     -- When true, indicates Ninetyfive is used exclusively as a cmp source
     use_cmp = false,
     mappings = {
-        -- When `true`, creates all the mappings set
-        enabled = true,
         -- Sets a global mapping to accept a suggestion
         accept = "<Tab>",
         -- Mapping to accept the next word
@@ -58,17 +56,13 @@ function Ninetyfive.defaults(options)
     return Ninetyfive.options
 end
 
---- Registers the plugin mappings if the option is enabled.
+--- Registers the plugin mappings.
 ---
 ---@param options table The mappins provided by the user.
 ---@param mappings table A key value map of the mapping name and its command.
 ---
 ---@private
 local function register_mappings(options, mappings)
-    if not options.enabled then
-        return
-    end
-
     for name, command in pairs(mappings) do
         local key = options[name]
         if not key then
