@@ -105,8 +105,6 @@ require("ninetyfive").setup({
 
   -- Key mappings configuration
   mappings = {
-    -- When `true`, creates all the mappings set
-    enabled = true,
     -- Sets a global mapping to accept a suggestion
     accept = "<Tab>",
     -- Sets a global mapping to accept the next word
@@ -142,7 +140,6 @@ use {
     require("ninetyfive").setup({
       enable_on_startup = true,
       mappings = {
-        enabled = true,
         accept = "<Tab>",
         accept_word = "<C-h>",
         accept_line = "<C-j>",
@@ -169,7 +166,6 @@ lua << EOF
 require("ninetyfive").setup({
   enable_on_startup = true,
   mappings = {
-    enabled = true,
     accept = "<Tab>",
     accept_word = "<C-h>",
     accept_line = "<C-j>",
@@ -197,7 +193,6 @@ return {
       debug = false,
       server = "wss://api.ninetyfive.gg",
       mappings = {
-        enabled = true,
         accept = "<Tab>",
         accept_word = "<C-h>",
         accept_line = "<C-j>",
