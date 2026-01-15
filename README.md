@@ -32,11 +32,6 @@ use {"ninetyfive-gg/ninetyfive.nvim", tag = "*" }
 use {"ninetyfive-gg/ninetyfive.nvim"}
 ```
 
-`use_cmp` accepts `"auto"` (default), `true`, or `false`. `"auto"` disables
-inline suggestions whenever the NinetyFive nvim-cmp source is configured. Use
-`true` to force cmp-only mode, or `false` to keep inline hints regardless of
-cmp.
-
 </td>
 </tr>
 <tr>
